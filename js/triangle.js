@@ -55,14 +55,8 @@
     ]);
     dataBuf.unmap();
 
-    // TODO: Embed these in JS with some script as Uint32Arrays
-    var simpleVert = await fetch("/shaders/simple.vert.spv")
-        .then(res => res.arrayBuffer().then(arr => new Uint32Array(arr)));
-    var simpleFrag = await fetch("/shaders/simple.frag.spv")
-        .then(res => res.arrayBuffer().then(arr => new Uint32Array(arr)));
-
-    var vertModule = device.createShaderModule({code: simpleVert});
-    var fragModule = device.createShaderModule({code: simpleFrag});
+    var vertModule = device.createShaderModule({code: simple_vert_spv});
+    var fragModule = device.createShaderModule({code: simple_frag_spv});
 
     var layout = device.createPipelineLayout({bindGroupLayouts: []});
 
