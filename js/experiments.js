@@ -40,17 +40,22 @@
         }
     };
 
-    var [positionBuf, posMapping] = device.createBufferMapped({
-        size: 3 * 3 * 4,
+    var [dataBuf, dataMapping] = device.createBufferMapped({
+        size: (3 + 4) * 3 * 4,
         usage: GPUBufferUsage.VERTEX
     });
-    new Float32Array(posMapping).set([
+    // Interleaved positions and colors
+    new Float32Array(dataMapping).set([
         1, -1, 0,
-        -1, -1, 0,
-        0, 1, 0
-    ]);
-    positionBuf.unmap();
+        1, 0, 0, 1,
 
+        -1, -1, 0,
+        0, 1, 0, 1,
+
+        0, 1, 0,
+        0, 0, 1, 1
+    ]);
+    dataBuf.unmap();
 
     // TODO: Embed these in JS with some script as Uint32Arrays
     var simpleVert = await fetch("/shaders/simple.vert.spv")
@@ -77,12 +82,19 @@
         vertexState: {
             vertexBuffers: [
                 {
-                    arrayStride: 3 * 4,
-                    attributes: [{
-                        format: "float3",
-                        offset: 0,
-                        shaderLocation: 0
-                    }]
+                    arrayStride: (3 + 4) * 4,
+                    attributes: [
+                        {
+                            format: "float3",
+                            offset: 0,
+                            shaderLocation: 0
+                        },
+                        {
+                            format: "float4",
+                            offset: 3 * 4,
+                            shaderLocation: 1
+                        }
+                    ]
                 }
             ]
         },
@@ -103,7 +115,7 @@
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
         renderPass.setPipeline(renderPipeline);
-        renderPass.setVertexBuffer(0, positionBuf);
+        renderPass.setVertexBuffer(0, dataBuf);
         renderPass.draw(3, 1, 0, 0);
 
         renderPass.endPass();
