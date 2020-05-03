@@ -40,22 +40,45 @@
         }
     };
 
-    var [dataBuf, dataMapping] = device.createBufferMapped({
-        size: (3 + 4) * 3 * 4,
-        usage: GPUBufferUsage.VERTEX
+    // Setup compute pass to generate our "vertices"
+    var dataBuf = device.createBuffer({
+        size: (4 + 4) * 3 * 4,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE
     });
-    // Interleaved positions and colors
-    new Float32Array(dataMapping).set([
-        1, -1, 0,
-        1, 0, 0, 1,
 
-        -1, -1, 0,
-        0, 1, 0, 1,
+    var computeBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            }
+        ]
+    });
+    var computeBindGroup = device.createBindGroup({
+        layout: computeBindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: dataBuf
+                }
+            }
+        ]
+    });
+    var computeLayout = device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]});
 
-        0, 1, 0,
-        0, 0, 1, 1
-    ]);
-    dataBuf.unmap();
+    var simpleCompute = await fetch("/shaders/generate_vertices.comp.spv")
+        .then(res => res.arrayBuffer().then(arr => new Uint32Array(arr)));
+    var computeModule = device.createShaderModule({code: simpleCompute});
+
+    var computePipeline = device.createComputePipeline({
+        layout: computeLayout,
+        computeStage: {
+            module: computeModule,
+            entryPoint: "main"
+        }
+    });
 
     // TODO: Embed these in JS with some script as Uint32Arrays
     var simpleVert = await fetch("/shaders/simple.vert.spv")
@@ -82,16 +105,16 @@
         vertexState: {
             vertexBuffers: [
                 {
-                    arrayStride: (3 + 4) * 4,
+                    arrayStride: (4 + 4) * 4,
                     attributes: [
                         {
-                            format: "float3",
+                            format: "float4",
                             offset: 0,
                             shaderLocation: 0
                         },
                         {
                             format: "float4",
-                            offset: 3 * 4,
+                            offset: 4 * 4,
                             shaderLocation: 1
                         }
                     ]
@@ -112,6 +135,13 @@
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
 
         var commandEncoder = device.createCommandEncoder();
+        
+        var computePass = commandEncoder.beginComputePass();
+        computePass.setBindGroup(0, computeBindGroup);
+        computePass.setPipeline(computePipeline);
+        computePass.dispatch(3, 1, 1);
+        computePass.endPass();
+
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
         renderPass.setPipeline(renderPipeline);
