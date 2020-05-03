@@ -41,17 +41,17 @@
     };
 
     var [dataBuf, dataBufMapping] = device.createBufferMapped({
-        size: (3 + 3) * 3 * 4,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE
+        size: 3 * 2 * 4 * 4,
+        usage: GPUBufferUsage.VERTEX
     });
     // Interleaved positions and colors
     new Float32Array(dataBufMapping).set([
-        1, -1, 0,
-        1, 0, 0,
-        -1, -1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 0, 1
+        1, -1, 0, 1,
+        1, 0, 0, 1,
+        -1, -1, 0, 1,
+        0, 1, 0, 1,
+        0, 1, 0, 1,
+        0, 0, 1, 1,
     ]);
     dataBuf.unmap();
 
@@ -74,16 +74,16 @@
         vertexState: {
             vertexBuffers: [
                 {
-                    arrayStride: (3 + 3) * 4,
+                    arrayStride: 2 * 4 * 4,
                     attributes: [
                         {
-                            format: "float3",
+                            format: "float4",
                             offset: 0,
                             shaderLocation: 0
                         },
                         {
-                            format: "float3",
-                            offset: 3 * 4,
+                            format: "float4",
+                            offset: 4 * 4,
                             shaderLocation: 1
                         }
                     ]

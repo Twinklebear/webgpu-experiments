@@ -42,14 +42,24 @@
 
     // Setup compute pass to generate our "vertices"
     var dataBuf = device.createBuffer({
-        size: (3 + 3) * 3 * 4,
+        size: 3 * 2 * 4 * 4,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE
+    });
+
+    var drawCommandBuf = device.createBuffer({
+        size: 4 * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.INDIRECT
     });
 
     var computeBindGroupLayout = device.createBindGroupLayout({
         entries: [
             {
                 binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            },
+            {
+                binding: 1,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer"
             }
@@ -62,6 +72,12 @@
                 binding: 0,
                 resource: {
                     buffer: dataBuf
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: drawCommandBuf
                 }
             }
         ]
@@ -97,16 +113,16 @@
         vertexState: {
             vertexBuffers: [
                 {
-                    arrayStride: (3 + 3) * 4,
+                    arrayStride: 2 * 4 * 4,
                     attributes: [
                         {
-                            format: "float3",
+                            format: "float4",
                             offset: 0,
                             shaderLocation: 0
                         },
                         {
-                            format: "float3",
-                            offset: 3 * 4,
+                            format: "float4",
+                            offset: 4 * 4,
                             shaderLocation: 1
                         }
                     ]
@@ -123,6 +139,8 @@
         }
     });
 
+    var warned_once = false;
+
     var frame = function() {
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
 
@@ -138,7 +156,15 @@
 
         renderPass.setPipeline(renderPipeline);
         renderPass.setVertexBuffer(0, dataBuf);
-        renderPass.draw(3, 1, 0, 0);
+        if (renderPass.drawIndirect) {
+            renderPass.drawIndirect(drawCommandBuf, 0);
+        } else {
+            if (!warned_once) {
+                alert("Your browser current does not support drawIndirect, falling back to draw");
+                warned_once = true;
+            }
+            renderPass.draw(3, 1, 0, 0);
+        }
 
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
