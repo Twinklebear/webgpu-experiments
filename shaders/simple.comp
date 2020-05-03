@@ -1,0 +1,22 @@
+#version 450 core
+
+#extension GL_EXT_scalar_block_layout : enable
+
+// Any core buffer layout is ok? Would scalar also be supported through the extension?
+layout(binding = 0, scalar) buffer VertexData {
+    vec3 verts[];
+};
+
+void main(void) {
+    if (gl_GlobalInvocationID.x == 0) {
+        verts[0] = vec3(1, -1, 0);
+        verts[1] = vec3(1, 0, 0);
+    } else if (gl_GlobalInvocationID.x == 1) {
+        verts[2] = vec3(-1, -1, 0);
+        verts[3] = vec3(0, 1, 0);
+    } else {
+        verts[4] = vec3(0, 1, 0);
+        verts[5] = vec3(0, 0, 1);
+    }
+}
+

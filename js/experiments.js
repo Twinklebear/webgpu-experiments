@@ -42,7 +42,7 @@
 
     // Setup compute pass to generate our "vertices"
     var dataBuf = device.createBuffer({
-        size: (4 + 4) * 3 * 4,
+        size: (3 + 3) * 3 * 4,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE
     });
 
@@ -68,7 +68,7 @@
     });
     var computeLayout = device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]});
 
-    var simpleCompute = await fetch("/shaders/generate_vertices.comp.spv")
+    var simpleCompute = await fetch("/shaders/simple.comp.spv")
         .then(res => res.arrayBuffer().then(arr => new Uint32Array(arr)));
     var computeModule = device.createShaderModule({code: simpleCompute});
 
@@ -105,16 +105,16 @@
         vertexState: {
             vertexBuffers: [
                 {
-                    arrayStride: (4 + 4) * 4,
+                    arrayStride: (3 + 3) * 4,
                     attributes: [
                         {
-                            format: "float4",
+                            format: "float3",
                             offset: 0,
                             shaderLocation: 0
                         },
                         {
-                            format: "float4",
-                            offset: 4 * 4,
+                            format: "float3",
+                            offset: 3 * 4,
                             shaderLocation: 1
                         }
                     ]
