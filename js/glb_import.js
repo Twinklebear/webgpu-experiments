@@ -182,16 +182,16 @@ GLTFAccessor.prototype.byteStride = function() {
     return Math.max(elementSize, this.view.byteStride);
 }
 
-var GLTFPrimitive = function(indices, positions, normals, texcoords) {
+var GLTFPrimitive = function(indices, positions, normals, texcoords, material) {
     this.indices = indices;
     this.positions = positions;
     this.normals = normals;
     this.texcoords = texcoords;
-    // TODO: material
+    this.material = material;
 }
 
 // Build the primitive render commands into the bundle
-GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncoder, shaderModules,
+GLTFPrimitive.prototype.buildRenderBundle = function(device, bindGroupLayouts, bundleEncoder, shaderModules,
     swapChainFormat, depthFormat)
 {
     var vertexStage = shaderModules.posVert;
@@ -246,6 +246,10 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
         });
     }
 
+    var layout = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayouts[0], bindGroupLayouts[1], this.material.bindGroupLayout],
+    });
+
     var pipelineDescriptor = {
         layout: layout,
         vertexStage: vertexStage,
@@ -270,6 +274,7 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
 
     var renderPipeline = device.createRenderPipeline(pipelineDescriptor);
 
+    bundleEncoder.setBindGroup(2, this.material.bindGroup);
     bundleEncoder.setPipeline(renderPipeline);
     bundleEncoder.setVertexBuffer(0, this.positions.view.gpuBuffer, this.positions.byteOffset, 0);
     bundleEncoder.setVertexBuffer(1, this.normals.view.gpuBuffer, this.normals.byteOffset, 0);
@@ -333,9 +338,7 @@ GLTFNode.prototype.buildRenderBundle = function(device, shaderModules, viewParam
         ]
     });
 
-    var layout = device.createPipelineLayout({
-        bindGroupLayouts: [viewParamsLayout, nodeParamsLayout]
-    });
+    var bindGroupLayouts = [viewParamsLayout, nodeParamsLayout];
 
     var bundleEncoder = device.createRenderBundleEncoder({
         colorFormats: [swapChainFormat],
@@ -346,7 +349,7 @@ GLTFNode.prototype.buildRenderBundle = function(device, shaderModules, viewParam
     bundleEncoder.setBindGroup(1, this.bindGroup);
 
     for (var i = 0; i < this.mesh.primitives.length; ++i) {
-        this.mesh.primitives[i].buildRenderBundle(device, layout, bundleEncoder, shaderModules,
+        this.mesh.primitives[i].buildRenderBundle(device, bindGroupLayouts, bundleEncoder, shaderModules,
             swapChainFormat, depthFormat);
     }
 
@@ -403,5 +406,70 @@ var makeGLTFSingleLevel = function(nodes) {
         flattenGLTFChildren(nodes, nodes[i], rootTfm);
     }
     return nodes;
+}
+
+var GLTFMaterial = function(material) {
+    this.baseColorFactor = [1, 1, 1, 1];
+    // padded to float4
+    this.emissiveFactor = [0, 0, 0, 1];
+    this.metallicFactor = 1.0;
+    this.roughnessFactor = 1.0;
+
+    if (material["pbrMetallicRoughness"] !== undefined) {
+        var pbr = material["pbrMetallicRoughness"];
+        if (pbr["baseColorFactor"] !== undefined) {
+            this.baseColorFactor = pbr["baseColorFactor"];
+        }
+        if (pbr["metallicFactor"] !== undefined) {
+            this.metallicFactor = pbr["metallicFactor"];
+        }
+        if (pbr["roughnessFactor"] !== undefined) {
+            this.roughnessFactor = pbr["roughnessFactor"];
+        }
+    }
+    if (material["emissiveFactor"] !== undefined) {
+        this.emissiveFactor[0] = material["emissiveFactor"][0];
+        this.emissiveFactor[1] = material["emissiveFactor"][1];
+        this.emissiveFactor[2] = material["emissiveFactor"][2];
+    }
+
+    this.gpuBuffer = null;
+    this.bindGroupLayout = null;
+    this.bindGroup = null;
+}
+
+GLTFMaterial.prototype.upload = function(device) {
+    var [buf, mapping] = device.createBufferMapped({
+        size: (2 * 4 + 2) * 4,
+        usage: GPUBufferUsage.UNIFORM,
+    });
+    var mappingView = new Float32Array(mapping);
+    mappingView.set(this.baseColorFactor);
+    mappingView.set(this.emissiveFactor, 4);
+    mappingView.set([this.metallicFactor, this.roughnessFactor], 8);
+    buf.unmap();
+    this.gpuBuffer = buf;
+
+    this.bindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "uniform-buffer"
+            }
+        ]
+    });
+
+    this.bindGroup = device.createBindGroup({
+        layout: this.bindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: this.gpuBuffer,
+                }
+            }
+        ]
+    });
 }
 

@@ -41,7 +41,13 @@
     for (var i = 0; i < glbJsonData.bufferViews.length; ++i) {
         bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
     }
-    console.log(bufferViews);
+
+    var defaultMaterial = new GLTFMaterial({});
+    var materials = [];
+    for (var i = 0; i < glbJsonData["materials"].length; ++i) {
+        materials.push(new GLTFMaterial(glbJsonData["materials"][i]));
+    }
+    console.log(materials);
 
     var meshes = [];
     for (var i = 0; i < glbJsonData.meshes.length; ++i) {
@@ -81,7 +87,14 @@
                 }
             }
 
-            var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
+            var material = null;
+            if (prim["material"] !== undefined) {
+                material = materials[prim["material"]];
+            } else {
+                material = defaultMaterial;
+            }
+
+            var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords, material);
             primitives.push(gltfPrim);
         }
         meshes.push(new GLTFMesh(mesh["name"], primitives));
@@ -93,6 +106,11 @@
         if (bufferViews[i].needsUpload) {
             bufferViews[i].upload(device);
         }
+    }
+
+    defaultMaterial.upload(device);
+    for (var i = 0; i < materials.length; ++i) {
+        materials[i].upload(device);
     }
 
     var nodes = []
