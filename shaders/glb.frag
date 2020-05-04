@@ -39,7 +39,11 @@ void main(void) {
 #endif
 */
 #ifdef BASE_COLOR_TEXTURE
-    color = vec4(base_color_factor.xyz * texture(sampler2D(base_color_texture, base_color_sampler), vuv).rgb, 1);
+    vec4 texture_color = texture(sampler2D(base_color_texture, base_color_sampler), vuv);
+    if (texture_color.a < 0.001) {
+        discard;
+    }
+    color = vec4(base_color_factor.xyz * texture_color.xyz, 1);
 #endif
 
     color.x = linear_to_srgb(color.x);

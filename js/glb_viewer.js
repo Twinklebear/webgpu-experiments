@@ -11,6 +11,7 @@
     //var glbFile = await fetch("/models/suzanne_texture.glb")
     //var glbFile = await fetch("/models/FlightHelmet.glb")
     var glbFile = await fetch("/models/sponza.glb")
+    //var glbFile = await fetch("/models/san-miguel.glb")
     //var glbFile = await fetch("/models/DamagedHelmet.glb")
         .then(res => res.arrayBuffer());
 
