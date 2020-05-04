@@ -158,7 +158,6 @@ GLTFBufferView.prototype.upload = function(device) {
         size: this.buffer.byteLength,
         usage: this.usage,
     });
-    console.log(this.buffer.byteLength);
     new (this.buffer.constructor)(mapping).set(this.buffer);
     buf.unmap();
     this.gpuBuffer = buf;

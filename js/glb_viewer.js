@@ -276,6 +276,32 @@
         }
     });
 
+    var renderBundle = null;
+    {
+        var bundleEncoder = device.createRenderBundleEncoder({
+            colorFormats: [swapChainFormat],
+            depthStencilFormat: "depth24plus-stencil8"
+        });
+        bundleEncoder.setPipeline(renderPipeline);
+        bundleEncoder.setBindGroup(0, bindGroup);
+
+        for (var i = 0; i < nodes.length; ++i) {
+            var n = nodes[i];
+            bundleEncoder.setBindGroup(1, n.bindGroup);
+            for (var j = 0; j < n.mesh.primitives.length; ++j) {
+                var p = n.mesh.primitives[j];
+                bundleEncoder.setIndexBuffer(p.indices.view.gpuBuffer, p.indices.byteOffset, 0);
+                bundleEncoder.setVertexBuffer(0, p.positions.view.gpuBuffer, p.positions.byteOffset, 0);
+                bundleEncoder.setVertexBuffer(1, p.normals.view.gpuBuffer, p.normals.byteOffset, 0);
+                if (p.texcoords) {
+                    bundleEncoder.setVertexBuffer(2, p.texcoords.view.gpuBuffer, p.texcoords.byteOffset, 0);
+                }
+                bundleEncoder.drawIndexed(p.indices.count, 1, 0, 0, 0);
+            }
+        }
+        renderBundle = bundleEncoder.finish();
+    }
+
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
     const center = vec3.set(vec3.create(), 0.0, 0.0, 0.0);
     const up = vec3.set(vec3.create(), 0.0, 1.0, 0.0);
@@ -314,7 +340,9 @@
         commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 4 * 4 * 4);
 
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
+        renderPass.executeBundles([renderBundle]);
 
+        /*
         renderPass.setPipeline(renderPipeline);
         renderPass.setBindGroup(0, bindGroup);
 
@@ -332,6 +360,7 @@
                 renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
             }
         }
+        */
 
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
