@@ -224,7 +224,8 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
             ]
         });
     }
-    if (this.texcoords) {
+    // TODO: Multi-texturing
+    if (this.texcoords.length > 0) {
         if (this.normals) {
             vertexStage = shaderModules.posNormalUVVert;
             fragmentStage = shaderModules.posNormalUVFrag;
@@ -234,7 +235,7 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
         }
 
         vertexBuffers.push({
-            arrayStride: this.texcoords.byteStride(),
+            arrayStride: this.texcoords[0].byteStride(),
             attributes: [
                 {
                     format: "float2",
@@ -245,15 +246,12 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
         });
     }
 
-    var indexFormat = this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
-
-    var renderPipeline = device.createRenderPipeline({
+    var pipelineDescriptor = {
         layout: layout,
         vertexStage: vertexStage,
         fragmentStage: fragmentStage,
         primitiveTopology: "triangle-list",
         vertexState: {
-            indexFormat: indexFormat,
             vertexBuffers: vertexBuffers,
         },
         colorStates: [{
@@ -264,16 +262,26 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
             depthWriteEnabled: true,
             depthCompare: "less"
         }
-    });
+    };
+    if (this.indices) {
+        pipelineDescriptor.vertexState.indexFormat =
+            this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
+    }
+
+    var renderPipeline = device.createRenderPipeline(pipelineDescriptor);
 
     bundleEncoder.setPipeline(renderPipeline);
-    bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, this.indices.byteOffset, 0);
     bundleEncoder.setVertexBuffer(0, this.positions.view.gpuBuffer, this.positions.byteOffset, 0);
     bundleEncoder.setVertexBuffer(1, this.normals.view.gpuBuffer, this.normals.byteOffset, 0);
-    if (this.texcoords) {
-        bundleEncoder.setVertexBuffer(2, this.texcoords.view.gpuBuffer, this.texcoords.byteOffset, 0);
+    if (this.texcoords.length > 0) {
+        bundleEncoder.setVertexBuffer(2, this.texcoords[0].view.gpuBuffer, this.texcoords[0].byteOffset, 0);
     }
-    bundleEncoder.drawIndexed(this.indices.count, 1, 0, 0, 0);
+    if (this.indices) {
+        bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, this.indices.byteOffset, 0);
+        bundleEncoder.drawIndexed(this.indices.count, 1, 0, 0, 0);
+    } else {
+        bundleEncoder.draw(this.positions.count, 1, 0, 0);
+    }
 }
 
 var GLTFMesh = function(name, primitives) {

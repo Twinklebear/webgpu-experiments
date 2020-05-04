@@ -7,10 +7,10 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    //var glbFile = await fetch("/models/2CylinderEngine.glb")
+    var glbFile = await fetch("/models/2CylinderEngine.glb")
     //var glbFile = await fetch("/models/suzanne.glb")
     //var glbFile = await fetch("/models/sponza.glb")
-    var glbFile = await fetch("/models/DamagedHelmet.glb")
+    //var glbFile = await fetch("/models/DamagedHelmet.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -55,32 +55,30 @@
                 continue;
             }
 
-            var accessor = glbJsonData["accessors"][prim["indices"]]
-            var viewID = accessor["bufferView"];
-            bufferViews[viewID].needsUpload = true;
-            bufferViews[viewID].addUsage(GPUBufferUsage.INDEX);
-            var indices = new GLTFAccessor(bufferViews[viewID], accessor);
+            var indices = null;
+            if (glbJsonData["accessors"][prim["indices"]] !== undefined) {
+                var accessor = glbJsonData["accessors"][prim["indices"]];
+                var viewID = accessor["bufferView"];
+                bufferViews[viewID].needsUpload = true;
+                bufferViews[viewID].addUsage(GPUBufferUsage.INDEX);
+                indices = new GLTFAccessor(bufferViews[viewID], accessor);
+            }
 
-            accessor = glbJsonData["accessors"][prim["attributes"]["POSITION"]];
-            viewID = accessor["bufferView"];
-            bufferViews[viewID].needsUpload = true;
-            bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
-            var positions = new GLTFAccessor(bufferViews[viewID], accessor);
-
-            accessor = glbJsonData["accessors"][prim["attributes"]["NORMAL"]];
-            viewID = accessor["bufferView"];
-            bufferViews[viewID].needsUpload = true;
-            bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
-            var normals = new GLTFAccessor(bufferViews[viewID], accessor);
-
-            // TODO: Should instead loop through since there may be multiple texcoord attributes
-            var texcoords = null;
-            if (prim["attributes"]["TEXCOORD_0"] !== undefined) {
-                accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
-                viewID = accessor["bufferView"];
+            var positions = null;
+            var normals = null;
+            var texcoords = [];
+            for (var attr in prim["attributes"]){
+                var accessor = glbJsonData["accessors"][prim["attributes"][attr]];
+                var viewID = accessor["bufferView"];
                 bufferViews[viewID].needsUpload = true;
                 bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
-                texcoords = new GLTFAccessor(bufferViews[viewID], accessor);
+                if (attr == "POSITION") {
+                    positions = new GLTFAccessor(bufferViews[viewID], accessor);
+                } else if (attr == "NORMAL") {
+                    normals = new GLTFAccessor(bufferViews[viewID], accessor);
+                } else if (attr.startsWith("TEXCOORD")) {
+                    texcoords.push(new GLTFAccessor(bufferViews[viewID], accessor));
+                }
             }
 
             var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
