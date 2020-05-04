@@ -7,7 +7,7 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    var glbFile = await fetch("/models/suzanne_texture.glb")
+    var glbFile = await fetch("/models/2CylinderEngine.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -32,6 +32,8 @@
         console.log("TODO: Multiple binary chunks in file");
     }
 
+    // TODO: Later could look at merging buffers and actually using the starting offsets,
+    // but want to avoid uploading the entire buffer since it may contain packed images 
     var bufferViews = []
     for (var i = 0; i < glbJsonData.bufferViews.length; ++i) {
         bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
@@ -113,6 +115,7 @@
             nodes.push(node);
         }
     }
+    console.log(nodes);
 
     // Just a basic test for loading textures and using them: assume image 0 is the
     // one used by the model as its base color
@@ -230,6 +233,7 @@
             indexFormat: "uint16",
             vertexBuffers: [
                 {
+                    // TODO: Should use the view's stride when making bundles
                     arrayStride: 3 * 4,
                     attributes: [
                         {
@@ -248,7 +252,7 @@
                             shaderLocation: 1
                         }
                     ]
-                },
+                }/*,
                 {
                     arrayStride: 2 * 4,
                     attributes: [
@@ -259,6 +263,7 @@
                         }
                     ]
                 }
+                */
             ]
         },
         colorStates: [{
@@ -318,11 +323,11 @@
             renderPass.setBindGroup(1, n.bindGroup);
             for (var j = 0; j < n.mesh.primitives.length; ++j) {
                 var p = n.mesh.primitives[j];
-                renderPass.setIndexBuffer(p.indices.view.gpuBuffer, 0, 0);
-                renderPass.setVertexBuffer(0, p.positions.view.gpuBuffer, 0, 0);
-                renderPass.setVertexBuffer(1, p.normals.view.gpuBuffer, 0, 0);
+                renderPass.setIndexBuffer(p.indices.view.gpuBuffer, p.indices.byteOffset, 0);
+                renderPass.setVertexBuffer(0, p.positions.view.gpuBuffer, p.positions.byteOffset, 0);
+                renderPass.setVertexBuffer(1, p.normals.view.gpuBuffer, p.normals.byteOffset, 0);
                 if (p.texcoords) {
-                    renderPass.setVertexBuffer(2, p.texcoords.view.gpuBuffer, 0, 0);
+                    renderPass.setVertexBuffer(2, p.texcoords.view.gpuBuffer, p.texcoords.byteOffset, 0);
                 }
                 renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
             }

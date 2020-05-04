@@ -125,20 +125,20 @@ var gltfTypeSize = function(componentType, type) {
 var GLTFBuffer = function(buffer, size, offset) {
     this.arrayBuffer = buffer;
     this.size = size;
-    this.offset = offset;
+    this.byteOffset = offset;
 }
 
 var GLTFBufferView = function(buffer, view) {
     this.length = view["byteLength"];
-    this.offset = buffer.offset;
+    this.byteOffset = buffer.byteOffset;
     if (view["byteOffset"] !== undefined) {
-        this.offset += view["byteOffset"];
+        this.byteOffset += view["byteOffset"];
     }
     this.byteStride = 0;
     if (view["byteStride"] !== undefined) {
         this.byteStride = view["byteStride"];
     }
-    this.buffer = new Uint8Array(buffer.arrayBuffer, this.offset, this.length);
+    this.buffer = new Uint8Array(buffer.arrayBuffer, this.byteOffset, this.length);
 
     this.needsUpload = false;
     this.gpuBuffer = null;
@@ -158,6 +158,7 @@ GLTFBufferView.prototype.upload = function(device) {
         size: this.buffer.byteLength,
         usage: this.usage,
     });
+    console.log(this.buffer.byteLength);
     new (this.buffer.constructor)(mapping).set(this.buffer);
     buf.unmap();
     this.gpuBuffer = buf;
@@ -171,6 +172,10 @@ var GLTFAccessor = function(view, accessor) {
     this.numComponents = gltfTypeNumComponents(accessor["type"]);
     this.numScalars = this.count * this.numComponents;
     this.view = view;
+    this.byteOffset = 0;
+    if (accessor["byteOffset"] !== undefined) {
+        this.byteOffset = accessor["byteOffset"];
+    }
 }
 
 GLTFAccessor.prototype.byteStride = function() {
@@ -186,6 +191,7 @@ var GLTFPrimitive = function(indices, positions, normals, texcoords) {
     // TODO: material
 }
 
+// TODO: Build a renderbundle for the primitive
 GLTFPrimitive.prototype.upload = function(device) {
     /*
     var [buf, mapping] = device.createBufferMapped({
@@ -261,7 +267,6 @@ GLTFNode.prototype.upload = function(device, bindGroupLayout) {
 }
 
 var readNodeTransform = function(node) {
-    return mat4.create();
     if (node["matrix"]) {
         var m = node["matrix"];
         // Both glTF and gl matrix are column major
@@ -269,7 +274,7 @@ var readNodeTransform = function(node) {
             m[0], m[1], m[2], m[3],
             m[4], m[5], m[6], m[7],
             m[8], m[9], m[10], m[11],
-            m[12], m[13], m[14], m[14]
+            m[12], m[13], m[14], m[15]
         );
     } else {
         var scale = [1, 1, 1];
@@ -289,18 +294,25 @@ var readNodeTransform = function(node) {
     }
 }
 
-var flattenGLTFChildren = function(nodes, node) {
-    //console.log(node);
+var flattenGLTFChildren = function(nodes, node, parent_transform) {
+    var tfm = readNodeTransform(node);
+    var tfm = mat4.mul(tfm, parent_transform, tfm);
+    node["matrix"] = tfm;
+    node["scale"] = undefined;
+    node["rotation"] = undefined;
+    node["translation"] = undefined;
     if (node["children"]) {
         for (var i = 0; i < node["children"].length; ++i) {
-            flattenGLTFChildren(nodes, nodes[node["children"][i]]);
+            flattenGLTFChildren(nodes, nodes[node["children"][i]], tfm);
         }
+        node["children"] = [];
     }
 }
 
 var makeGLTFSingleLevel = function(nodes) {
+    var rootTfm = mat4.create();
     for (var i = 0; i < nodes.length; ++i) {
-        flattenGLTFChildren(nodes, nodes[i]);
+        flattenGLTFChildren(nodes, nodes[i], rootTfm);
     }
     return nodes;
 }
