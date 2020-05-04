@@ -7,7 +7,7 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    var glbFile = await fetch("/models/FlightHelmet.glb")
+    var glbFile = await fetch("/models/sponza.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -35,19 +35,16 @@
     var meshes = [];
     for (var i = 0; i < glbJsonData.meshes.length; ++i) {
         var mesh = glbJsonData.meshes[i];
-        console.log(mesh);
 
         var primitives = []
         for (var j = 0; j < mesh.primitives.length; ++j) {
             var prim = mesh.primitives[j];
-            console.log(prim);
             if (prim["mode"] != undefined && prim["mode"] != 4) {
                 alert("Ignoring primitive with unsupported mode " + prim["mode"]);
                 continue;
             }
 
             var accessor = glbJsonData["accessors"][prim["indices"]]
-
             var indices = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
 
             accessor = glbJsonData["accessors"][prim["attributes"]["POSITION"]];
@@ -57,8 +54,11 @@
             var normals = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
 
             // TODO: Should instead loop through since there may be multiple texcoord attributes
-            accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
-            var texcoords = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+            var texcoords = null;
+            if (prim["attributes"]["TEXCOORD_0"]) {
+                accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
+                texcoords = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+            }
 
             var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
             gltfPrim.upload(device);
@@ -251,7 +251,7 @@
     const up = vec3.set(vec3.create(), 0.0, 1.0, 0.0);
     var camera = new ArcballCamera(defaultEye, center, up, 2, [canvas.width, canvas.height]);
 	var proj = mat4.perspective(mat4.create(), 50 * Math.PI / 180.0,
-		canvas.width / canvas.height, 0.1, 100);
+		canvas.width / canvas.height, 0.1, 1000);
 	var projView = mat4.create();
 
 	var controller = new Controller();
@@ -296,7 +296,9 @@
                 renderPass.setIndexBuffer(p.gpuIndices, 0, 0);
                 renderPass.setVertexBuffer(0, p.gpuPositions, 0, 0);
                 renderPass.setVertexBuffer(1, p.gpuNormals, 0, 0);
-                renderPass.setVertexBuffer(2, p.gpuTexcoords, 0, 0);
+                if (p.gpuTexcoords) {
+                    renderPass.setVertexBuffer(2, p.gpuTexcoords, 0, 0);
+                }
                 renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
             }
         }

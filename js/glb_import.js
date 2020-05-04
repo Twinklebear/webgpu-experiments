@@ -101,6 +101,9 @@ var GLTFBufferView = function(buffer, view) {
     if (view["byteOffset"]) {
         this.offset += view["byteOffset"];
     }
+    if (view["byteStride"]) {
+        alert("WILL: TODO Handle byteStride in buffers!");
+    }
     this.buffer = new Uint8Array(buffer.arrayBuffer, this.offset, this.length);
 }
 
@@ -196,13 +199,15 @@ GLTFPrimitive.prototype.upload = function(device) {
     buf.unmap();
     this.gpuNormals = buf;
 
-    var [buf, mapping] = device.createBufferMapped({
-        size: this.texcoords.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    this.texcoords.upload(mapping);
-    buf.unmap();
-    this.gpuTexcoords = buf;
+    if (this.texcoords) {
+        var [buf, mapping] = device.createBufferMapped({
+            size: this.texcoords.byteLength(),
+            usage: GPUBufferUsage.VERTEX
+        });
+        this.texcoords.upload(mapping);
+        buf.unmap();
+        this.gpuTexcoords = buf;
+    }
 }
 
 var GLTFMesh = function(name, primitives) {
@@ -242,6 +247,7 @@ GLTFNode.prototype.upload = function(device, bindGroupLayout) {
 }
 
 var readNodeTransform = function(node) {
+    return mat4.create();
     if (node["matrix"]) {
         var m = node["matrix"];
         // Both glTF and gl matrix are column major
@@ -269,9 +275,19 @@ var readNodeTransform = function(node) {
     }
 }
 
+var flattenGLTFChildren = function(nodes, node) {
+    //console.log(node);
+    if (node["children"]) {
+        for (var i = 0; i < node["children"].length; ++i) {
+            flattenGLTFChildren(nodes, nodes[node["children"][i]]);
+        }
+    }
+}
+
 var makeGLTFSingleLevel = function(nodes) {
-    var singleLevel = {};
-    // TODO
+    for (var i = 0; i < nodes.length; ++i) {
+        flattenGLTFChildren(nodes, nodes[i]);
+    }
     return nodes;
 }
 

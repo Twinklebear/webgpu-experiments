@@ -2,6 +2,7 @@
 
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 normal;
+// TODO: For models missing uvs we need separate render pipeline and shader set
 layout(location = 2) in vec2 uv;
 
 layout(location = 0) out vec3 vnormal;
