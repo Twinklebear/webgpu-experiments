@@ -11,7 +11,7 @@ layout(binding = 2) uniform texture2D image_texture;
 */
 
 void main(void) {
-    color = vec4(0.5 * vnormal + 1.0, 1.0);
+    color = vec4(0.5 * (vnormal + 1.0), 1.0);
     //color = vec4(texture(sampler2D(image_texture, texture_sampler), vuv).rgb, 1);
 }
 
