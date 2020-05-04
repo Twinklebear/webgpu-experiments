@@ -8,6 +8,7 @@
     var device = await adapter.requestDevice();
 
     var glbFile = await fetch("/models/2CylinderEngine.glb")
+    //var glbFile = await fetch("/models/suzanne.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -81,7 +82,6 @@
             }
 
             var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
-            gltfPrim.upload(device);
             primitives.push(gltfPrim);
         }
         meshes.push(new GLTFMesh(mesh["name"], primitives));
@@ -95,23 +95,13 @@
         }
     }
 
-    var nodeBindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.VERTEX,
-                type: "uniform-buffer"
-            }
-        ]
-    });
-
     var nodes = []
     var gltfNodes = makeGLTFSingleLevel(glbJsonData["nodes"]);
     for (var i = 0; i < gltfNodes.length; ++i) {
         var n = gltfNodes[i];
         if (n["mesh"] !== undefined) {
             var node = new GLTFNode(n["name"], meshes[n["mesh"]], readNodeTransform(n));
-            node.upload(device, nodeBindGroupLayout);
+            node.upload(device);
             nodes.push(node);
         }
     }
@@ -180,15 +170,17 @@
         }
     };
 
-    var vertModule = device.createShaderModule({code: glb_vert_spv});
-    var fragModule = device.createShaderModule({code: glb_frag_spv});
+    var shaderModules = {
+        simpleVert: device.createShaderModule({code: glb_vert_spv}),
+        simpleFrag: device.createShaderModule({code: glb_frag_spv}),
+    };
 
     var sampler = device.createSampler({
         magFilter: "linear",
         minFilter: "linear"
     });
 
-    var bindGroupLayout = device.createBindGroupLayout({
+    var viewParamsLayout = device.createBindGroupLayout({
         entries: [
             {
                 binding: 0,
@@ -197,16 +189,13 @@
             }
         ]
     });
-    var layout = device.createPipelineLayout({
-        bindGroupLayouts: [bindGroupLayout, nodeBindGroupLayout]
-    });
 
     var viewParamBuf = device.createBuffer({
         size: 4 * 4 * 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    var bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
+    var viewParamsBindGroup = device.createBindGroup({
+        layout: viewParamsLayout,
         entries: [
             {
                 binding: 0,
@@ -217,89 +206,12 @@
         ]
     });
 
-    var renderPipeline = device.createRenderPipeline({
-        layout: layout,
-        vertexStage: {
-            module: vertModule,
-            entryPoint: "main"
-        },
-        fragmentStage: {
-            module: fragModule,
-            entryPoint: "main"
-        },
-        primitiveTopology: "triangle-list",
-        vertexState: {
-            // TODO: GLB can also have uint32
-            indexFormat: "uint16",
-            vertexBuffers: [
-                {
-                    // TODO: Should use the view's stride when making bundles
-                    arrayStride: 3 * 4,
-                    attributes: [
-                        {
-                            format: "float3",
-                            offset: 0,
-                            shaderLocation: 0
-                        }
-                    ]
-                },
-                {
-                    arrayStride: 3 * 4,
-                    attributes: [
-                        {
-                            format: "float3",
-                            offset: 0,
-                            shaderLocation: 1
-                        }
-                    ]
-                }/*,
-                {
-                    arrayStride: 2 * 4,
-                    attributes: [
-                        {
-                            format: "float2",
-                            offset: 0,
-                            shaderLocation: 2
-                        }
-                    ]
-                }
-                */
-            ]
-        },
-        colorStates: [{
-            format: swapChainFormat
-        }],
-        depthStencilState: {
-            format: "depth24plus-stencil8",
-            depthWriteEnabled: true,
-            depthCompare: "less"
-        }
-    });
-
-    var renderBundle = null;
-    {
-        var bundleEncoder = device.createRenderBundleEncoder({
-            colorFormats: [swapChainFormat],
-            depthStencilFormat: "depth24plus-stencil8"
-        });
-        bundleEncoder.setPipeline(renderPipeline);
-        bundleEncoder.setBindGroup(0, bindGroup);
-
-        for (var i = 0; i < nodes.length; ++i) {
-            var n = nodes[i];
-            bundleEncoder.setBindGroup(1, n.bindGroup);
-            for (var j = 0; j < n.mesh.primitives.length; ++j) {
-                var p = n.mesh.primitives[j];
-                bundleEncoder.setIndexBuffer(p.indices.view.gpuBuffer, p.indices.byteOffset, 0);
-                bundleEncoder.setVertexBuffer(0, p.positions.view.gpuBuffer, p.positions.byteOffset, 0);
-                bundleEncoder.setVertexBuffer(1, p.normals.view.gpuBuffer, p.normals.byteOffset, 0);
-                if (p.texcoords) {
-                    bundleEncoder.setVertexBuffer(2, p.texcoords.view.gpuBuffer, p.texcoords.byteOffset, 0);
-                }
-                bundleEncoder.drawIndexed(p.indices.count, 1, 0, 0, 0);
-            }
-        }
-        renderBundle = bundleEncoder.finish();
+    var renderBundles = [];
+    for (var i = 0; i < nodes.length; ++i) {
+        var n = nodes[i];
+        var bundle = n.buildRenderBundle(device, shaderModules, viewParamsLayout, viewParamsBindGroup,
+            swapChainFormat, "depth24plus-stencil8");
+        renderBundles.push(bundle);
     }
 
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
@@ -340,27 +252,7 @@
         commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 4 * 4 * 4);
 
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
-        renderPass.executeBundles([renderBundle]);
-
-        /*
-        renderPass.setPipeline(renderPipeline);
-        renderPass.setBindGroup(0, bindGroup);
-
-        for (var i = 0; i < nodes.length; ++i) {
-            var n = nodes[i];
-            renderPass.setBindGroup(1, n.bindGroup);
-            for (var j = 0; j < n.mesh.primitives.length; ++j) {
-                var p = n.mesh.primitives[j];
-                renderPass.setIndexBuffer(p.indices.view.gpuBuffer, p.indices.byteOffset, 0);
-                renderPass.setVertexBuffer(0, p.positions.view.gpuBuffer, p.positions.byteOffset, 0);
-                renderPass.setVertexBuffer(1, p.normals.view.gpuBuffer, p.normals.byteOffset, 0);
-                if (p.texcoords) {
-                    renderPass.setVertexBuffer(2, p.texcoords.view.gpuBuffer, p.texcoords.byteOffset, 0);
-                }
-                renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
-            }
-        }
-        */
+        renderPass.executeBundles(renderBundles);
 
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);

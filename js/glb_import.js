@@ -190,43 +190,85 @@ var GLTFPrimitive = function(indices, positions, normals, texcoords) {
     // TODO: material
 }
 
-// TODO: Build a renderbundle for the primitive
-GLTFPrimitive.prototype.upload = function(device) {
-    /*
-    var [buf, mapping] = device.createBufferMapped({
-        size: this.indices.byteLength(),
-        usage: GPUBufferUsage.INDEX
-    });
-    this.indices.upload(mapping);
-    buf.unmap();
-    this.gpuIndices = buf; 
-
-    var [buf, mapping] = device.createBufferMapped({
-        size: this.positions.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    this.positions.upload(mapping);
-    buf.unmap();
-    this.gpuPositions = buf;
-
-    var [buf, mapping] = device.createBufferMapped({
-        size: this.normals.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    this.normals.upload(mapping);
-    buf.unmap();
-    this.gpuNormals = buf;
-
-    if (this.texcoords) {
-        var [buf, mapping] = device.createBufferMapped({
-            size: this.texcoords.byteLength(),
-            usage: GPUBufferUsage.VERTEX
+// Build the primitive render commands into the bundle
+GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncoder, shaderModules,
+    swapChainFormat, depthFormat)
+{
+    var vertexBuffers = [
+        {
+            arrayStride: this.positions.byteStride(),
+            attributes: [
+                {
+                    format: "float3",
+                    offset: 0,
+                    shaderLocation: 0
+                }
+            ]
+        }
+    ];
+    // TODO: Are normals are always required for GLB? 
+    if (this.normals) {
+        vertexBuffers.push({
+            arrayStride: this.normals.byteStride(),
+            attributes: [
+                {
+                    format: "float3",
+                    offset: 0,
+                    shaderLocation: 1
+                }
+            ]
         });
-        this.texcoords.upload(mapping);
-        buf.unmap();
-        this.gpuTexcoords = buf;
+    }
+    /*
+    if (this.texcoords) {
+        vertexBuffers.push({
+            arrayStride: this.texcoords.byteStride(),
+            attributes: [
+                {
+                    format: "float2",
+                    offset: 0,
+                    shaderLocation: 2
+                }
+            ]
+        });
     }
     */
+
+    var indexFormat = this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
+
+    var renderPipeline = device.createRenderPipeline({
+        layout: layout,
+        vertexStage: {
+            module: shaderModules.simpleVert,
+            entryPoint: "main"
+        },
+        fragmentStage: {
+            module: shaderModules.simpleFrag,
+            entryPoint: "main"
+        },
+        primitiveTopology: "triangle-list",
+        vertexState: {
+            indexFormat: indexFormat,
+            vertexBuffers: vertexBuffers,
+        },
+        colorStates: [{
+            format: swapChainFormat
+        }],
+        depthStencilState: {
+            format: depthFormat,
+            depthWriteEnabled: true,
+            depthCompare: "less"
+        }
+    });
+
+    bundleEncoder.setPipeline(renderPipeline);
+    bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, this.indices.byteOffset, 0);
+    bundleEncoder.setVertexBuffer(0, this.positions.view.gpuBuffer, this.positions.byteOffset, 0);
+    bundleEncoder.setVertexBuffer(1, this.normals.view.gpuBuffer, this.normals.byteOffset, 0);
+    if (this.texcoords) {
+        bundleEncoder.setVertexBuffer(2, this.texcoords.view.gpuBuffer, this.texcoords.byteOffset, 0);
+    }
+    bundleEncoder.drawIndexed(this.indices.count, 1, 0, 0, 0);
 }
 
 var GLTFMesh = function(name, primitives) {
@@ -243,7 +285,7 @@ var GLTFNode = function(name, mesh, transform) {
     this.bindGroup = null;
 }
 
-GLTFNode.prototype.upload = function(device, bindGroupLayout) {
+GLTFNode.prototype.upload = function(device) {
     var [buf, mapping] = device.createBufferMapped({
         size: 4 * 4 * 4,
         usage: GPUBufferUsage.UNIFORM
@@ -251,9 +293,23 @@ GLTFNode.prototype.upload = function(device, bindGroupLayout) {
     new Float32Array(mapping).set(this.transform);
     buf.unmap();
     this.gpuUniforms = buf;
+}
+
+GLTFNode.prototype.buildRenderBundle = function(device, shaderModules, viewParamsLayout, viewParamsBindGroup,
+    swapChainFormat, depthFormat)
+{
+    var nodeParamsLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.VERTEX,
+                type: "uniform-buffer"
+            }
+        ]
+    });
 
     this.bindGroup = device.createBindGroup({
-        layout: bindGroupLayout,
+        layout: nodeParamsLayout,
         entries: [
             {
                 binding: 0,
@@ -263,6 +319,26 @@ GLTFNode.prototype.upload = function(device, bindGroupLayout) {
             }
         ]
     });
+
+    var layout = device.createPipelineLayout({
+        bindGroupLayouts: [viewParamsLayout, nodeParamsLayout]
+    });
+
+    var bundleEncoder = device.createRenderBundleEncoder({
+        colorFormats: [swapChainFormat],
+        depthStencilFormat: depthFormat,
+    });
+
+    bundleEncoder.setBindGroup(0, viewParamsBindGroup);
+    bundleEncoder.setBindGroup(1, this.bindGroup);
+
+    for (var i = 0; i < this.mesh.primitives.length; ++i) {
+        this.mesh.primitives[i].buildRenderBundle(device, layout, bundleEncoder, shaderModules,
+            swapChainFormat, depthFormat);
+    }
+
+    this.renderBundle = bundleEncoder.finish();
+    return this.renderBundle;
 }
 
 var readNodeTransform = function(node) {
