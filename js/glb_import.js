@@ -88,6 +88,39 @@ var gltfTypeToWebGPU = function(componentType, type) {
     }
 }
 
+var gltfTypeSize = function(componentType, type) {
+    var typeSize = 0;
+    switch (componentType) {
+        case GLTFComponentType.BYTE:
+            typeSize = 1;
+            break;
+        case GLTFComponentType.UNSIGNED_BYTE:
+            typeSize = 1;
+            break;
+        case GLTFComponentType.SHORT:
+            typeSize = 2;
+            break;
+        case GLTFComponentType.UNSIGNED_SHORT:
+            typeSize = 2;
+            break;
+        case GLTFComponentType.INT:
+            typeSize = 4;
+            break;
+        case GLTFComponentType.UNSIGNED_INT:
+            typeSize = 4;
+            break;
+        case GLTFComponentType.FLOAT:
+            typeSize = 4;
+            break;
+        case GLTFComponentType.DOUBLE:
+            typeSize = 4;
+            break;
+        default:
+            alert("Unrecognized GLTF Component Type?");
+    }
+    return gltfTypeNumComponents(type) * typeSize;
+}
+
 // Create a GLTFBuffer referencing some ArrayBuffer
 var GLTFBuffer = function(buffer, size, offset) {
     this.arrayBuffer = buffer;
@@ -98,67 +131,51 @@ var GLTFBuffer = function(buffer, size, offset) {
 var GLTFBufferView = function(buffer, view) {
     this.length = view["byteLength"];
     this.offset = buffer.offset;
-    if (view["byteOffset"]) {
+    if (view["byteOffset"] !== undefined) {
         this.offset += view["byteOffset"];
     }
-    if (view["byteStride"]) {
-        alert("WILL: TODO Handle byteStride in buffers!");
+    this.byteStride = 0;
+    if (view["byteStride"] !== undefined) {
+        this.byteStride = view["byteStride"];
     }
     this.buffer = new Uint8Array(buffer.arrayBuffer, this.offset, this.length);
+
+    this.needsUpload = false;
+    this.gpuBuffer = null;
+    this.usage = 0;
 }
 
 GLTFBufferView.prototype.arrayBuffer = function() {
     return this.buffer.buffer;
 }
 
+GLTFBufferView.prototype.addUsage = function(usage) {
+    this.usage = this.usage | usage;
+}
+
+GLTFBufferView.prototype.upload = function(device) {
+    var [buf, mapping] = device.createBufferMapped({
+        size: this.buffer.byteLength,
+        usage: this.usage,
+    });
+    new (this.buffer.constructor)(mapping).set(this.buffer);
+    buf.unmap();
+    this.gpuBuffer = buf;
+}
+
 var GLTFAccessor = function(view, accessor) {
     this.count = accessor["count"];
     this.componentType = accessor["componentType"];
-    this.type = gltfTypeToWebGPU(this.componentType, accessor["type"]);
+    this.gltfType = accessor["type"];
+    this.webGPUType = gltfTypeToWebGPU(this.componentType, accessor["type"]);
     this.numComponents = gltfTypeNumComponents(accessor["type"]);
-    var numScalars = this.count * this.numComponents;
-    switch (this.componentType) {
-        case GLTFComponentType.BYTE:
-            this.view = new Int8Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.UNSIGNED_BYTE:
-            this.view = new Uint8Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.SHORT:
-            this.view = new Int16Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.UNSIGNED_SHORT:
-            this.view = new Uint16Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.INT:
-            this.view = new Int32Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.UNSIGNED_INT:
-            this.view = new Uint32Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.FLOAT:
-            this.view = new Float32Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        case GLTFComponentType.DOUBLE:
-            this.view = new Float64Array(view.arrayBuffer(), view.offset, numScalars);
-            break;
-        default:
-            alert("Unrecognized GLTF Component Type?");
-            return null;
-    }
+    this.numScalars = this.count * this.numComponents;
+    this.view = view;
 }
 
-GLTFAccessor.prototype.byteLength = function() {
-    return this.view.byteLength;
-}
-
-GLTFAccessor.prototype.upload = function(mapping) {
-    new (this.view.constructor)(mapping).set(this.view);
-}
-
-var makeGLTFAccessor = function(buffer, view, accessor) {
-    var bufView = new GLTFBufferView(buffer, view);
-    return new GLTFAccessor(bufView, accessor);
+GLTFAccessor.prototype.byteStride = function() {
+    var elementSize = gltfTypeSize(this.componentType, this.gltfType);
+    return Math.max(elementSize, this.view.byteStride);
 }
 
 var GLTFPrimitive = function(indices, positions, normals, texcoords) {
@@ -166,15 +183,11 @@ var GLTFPrimitive = function(indices, positions, normals, texcoords) {
     this.positions = positions;
     this.normals = normals;
     this.texcoords = texcoords;
-
-    this.gpuIndices = null;
-    this.gpuPositions = null;
-    this.gpuNormals = null;
-    this.gpuTexcoords = null;
     // TODO: material
 }
 
 GLTFPrimitive.prototype.upload = function(device) {
+    /*
     var [buf, mapping] = device.createBufferMapped({
         size: this.indices.byteLength(),
         usage: GPUBufferUsage.INDEX
@@ -208,6 +221,7 @@ GLTFPrimitive.prototype.upload = function(device) {
         buf.unmap();
         this.gpuTexcoords = buf;
     }
+    */
 }
 
 var GLTFMesh = function(name, primitives) {

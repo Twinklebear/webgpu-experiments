@@ -7,7 +7,7 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    var glbFile = await fetch("/models/sponza.glb")
+    var glbFile = await fetch("/models/suzanne_texture.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -32,6 +32,12 @@
         console.log("TODO: Multiple binary chunks in file");
     }
 
+    var bufferViews = []
+    for (var i = 0; i < glbJsonData.bufferViews.length; ++i) {
+        bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
+    }
+    console.log(bufferViews);
+
     var meshes = [];
     for (var i = 0; i < glbJsonData.meshes.length; ++i) {
         var mesh = glbJsonData.meshes[i];
@@ -45,19 +51,31 @@
             }
 
             var accessor = glbJsonData["accessors"][prim["indices"]]
-            var indices = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+            var viewID = accessor["bufferView"];
+            bufferViews[viewID].needsUpload = true;
+            bufferViews[viewID].addUsage(GPUBufferUsage.INDEX);
+            var indices = new GLTFAccessor(bufferViews[viewID], accessor);
 
             accessor = glbJsonData["accessors"][prim["attributes"]["POSITION"]];
-            var positions = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+            viewID = accessor["bufferView"];
+            bufferViews[viewID].needsUpload = true;
+            bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
+            var positions = new GLTFAccessor(bufferViews[viewID], accessor);
 
             accessor = glbJsonData["accessors"][prim["attributes"]["NORMAL"]];
-            var normals = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+            viewID = accessor["bufferView"];
+            bufferViews[viewID].needsUpload = true;
+            bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
+            var normals = new GLTFAccessor(bufferViews[viewID], accessor);
 
             // TODO: Should instead loop through since there may be multiple texcoord attributes
             var texcoords = null;
-            if (prim["attributes"]["TEXCOORD_0"]) {
+            if (prim["attributes"]["TEXCOORD_0"] !== undefined) {
                 accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
-                texcoords = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+                viewID = accessor["bufferView"];
+                bufferViews[viewID].needsUpload = true;
+                bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
+                texcoords = new GLTFAccessor(bufferViews[viewID], accessor);
             }
 
             var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
@@ -67,6 +85,13 @@
         meshes.push(new GLTFMesh(mesh["name"], primitives));
     }
     console.log(meshes);
+
+    // Upload the different views used by meshes
+    for (var i = 0; i < bufferViews.length; ++i) {
+        if (bufferViews[i].needsUpload) {
+            bufferViews[i].upload(device);
+        }
+    }
 
     var nodeBindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -82,7 +107,7 @@
     var gltfNodes = makeGLTFSingleLevel(glbJsonData["nodes"]);
     for (var i = 0; i < gltfNodes.length; ++i) {
         var n = gltfNodes[i];
-        if (n["mesh"]) {
+        if (n["mesh"] !== undefined) {
             var node = new GLTFNode(n["name"], meshes[n["mesh"]], readNodeTransform(n));
             node.upload(device, nodeBindGroupLayout);
             nodes.push(node);
@@ -293,11 +318,11 @@
             renderPass.setBindGroup(1, n.bindGroup);
             for (var j = 0; j < n.mesh.primitives.length; ++j) {
                 var p = n.mesh.primitives[j];
-                renderPass.setIndexBuffer(p.gpuIndices, 0, 0);
-                renderPass.setVertexBuffer(0, p.gpuPositions, 0, 0);
-                renderPass.setVertexBuffer(1, p.gpuNormals, 0, 0);
-                if (p.gpuTexcoords) {
-                    renderPass.setVertexBuffer(2, p.gpuTexcoords, 0, 0);
+                renderPass.setIndexBuffer(p.indices.view.gpuBuffer, 0, 0);
+                renderPass.setVertexBuffer(0, p.positions.view.gpuBuffer, 0, 0);
+                renderPass.setVertexBuffer(1, p.normals.view.gpuBuffer, 0, 0);
+                if (p.texcoords) {
+                    renderPass.setVertexBuffer(2, p.texcoords.view.gpuBuffer, 0, 0);
                 }
                 renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
             }
