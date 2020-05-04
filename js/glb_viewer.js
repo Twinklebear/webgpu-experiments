@@ -71,7 +71,7 @@
     var nodeBindGroupLayout = device.createBindGroupLayout({
         entries: [
             {
-                binding: 1,
+                binding: 0,
                 visibility: GPUShaderStage.VERTEX,
                 type: "uniform-buffer"
             }

@@ -237,7 +237,7 @@ GLTFNode.prototype.upload = function(device, bindGroupLayout) {
         layout: bindGroupLayout,
         entries: [
             {
-                binding: 1,
+                binding: 0,
                 resource: {
                     buffer: this.gpuUniforms
                 }
