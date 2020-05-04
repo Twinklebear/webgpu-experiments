@@ -97,7 +97,10 @@ var GLTFBuffer = function(buffer, size, offset) {
 
 var GLTFBufferView = function(buffer, view) {
     this.length = view["byteLength"];
-    this.offset = view["byteOffset"] + buffer.offset;
+    this.offset = buffer.offset;
+    if (view["byteOffset"]) {
+        this.offset += view["byteOffset"];
+    }
     this.buffer = new Uint8Array(buffer.arrayBuffer, this.offset, this.length);
 }
 
@@ -146,6 +149,10 @@ GLTFAccessor.prototype.byteLength = function() {
     return this.view.byteLength;
 }
 
+GLTFAccessor.prototype.upload = function(mapping) {
+    new (this.view.constructor)(mapping).set(this.view);
+}
+
 var makeGLTFAccessor = function(buffer, view, accessor) {
     var bufView = new GLTFBufferView(buffer, view);
     return new GLTFAccessor(bufView, accessor);
@@ -156,10 +163,115 @@ var GLTFPrimitive = function(indices, positions, normals, texcoords) {
     this.positions = positions;
     this.normals = normals;
     this.texcoords = texcoords;
+
+    this.gpuIndices = null;
+    this.gpuPositions = null;
+    this.gpuNormals = null;
+    this.gpuTexcoords = null;
+    // TODO: material
+}
+
+GLTFPrimitive.prototype.upload = function(device) {
+    var [buf, mapping] = device.createBufferMapped({
+        size: this.indices.byteLength(),
+        usage: GPUBufferUsage.INDEX
+    });
+    this.indices.upload(mapping);
+    buf.unmap();
+    this.gpuIndices = buf; 
+
+    var [buf, mapping] = device.createBufferMapped({
+        size: this.positions.byteLength(),
+        usage: GPUBufferUsage.VERTEX
+    });
+    this.positions.upload(mapping);
+    buf.unmap();
+    this.gpuPositions = buf;
+
+    var [buf, mapping] = device.createBufferMapped({
+        size: this.normals.byteLength(),
+        usage: GPUBufferUsage.VERTEX
+    });
+    this.normals.upload(mapping);
+    buf.unmap();
+    this.gpuNormals = buf;
+
+    var [buf, mapping] = device.createBufferMapped({
+        size: this.texcoords.byteLength(),
+        usage: GPUBufferUsage.VERTEX
+    });
+    this.texcoords.upload(mapping);
+    buf.unmap();
+    this.gpuTexcoords = buf;
 }
 
 var GLTFMesh = function(name, primitives) {
     this.name = name;
     this.primitives = primitives;
+}
+
+var GLTFNode = function(name, mesh, transform) {
+    this.name = name;
+    this.mesh = mesh;
+    this.transform = transform;
+
+    this.gpuUniforms = null;
+    this.bindGroup = null;
+}
+
+GLTFNode.prototype.upload = function(device, bindGroupLayout) {
+    var [buf, mapping] = device.createBufferMapped({
+        size: 4 * 4 * 4,
+        usage: GPUBufferUsage.UNIFORM
+    });
+    new Float32Array(mapping).set(this.transform);
+    buf.unmap();
+    this.gpuUniforms = buf;
+
+    this.bindGroup = device.createBindGroup({
+        layout: bindGroupLayout,
+        entries: [
+            {
+                binding: 1,
+                resource: {
+                    buffer: this.gpuUniforms
+                }
+            }
+        ]
+    });
+}
+
+var readNodeTransform = function(node) {
+    if (node["matrix"]) {
+        var m = node["matrix"];
+        // Both glTF and gl matrix are column major
+        return mat4.fromValues(
+            m[0], m[1], m[2], m[3],
+            m[4], m[5], m[6], m[7],
+            m[8], m[9], m[10], m[11],
+            m[12], m[13], m[14], m[14]
+        );
+    } else {
+        var scale = [1, 1, 1];
+        var rotation = [0, 0, 0, 1];
+        var translation = [0, 0, 0];
+        if (node["scale"]) {
+            scale = node["scale"];
+        }
+        if (node["rotation"]) {
+            rotation = node["rotation"];
+        }
+        if (node["translation"]) {
+            translation = node["translation"];
+        }
+        var m = mat4.create();
+        return mat4.fromRotationTranslationScale(m, rotation, translation, scale);
+    }
+}
+
+var makeGLTFSingleLevel = function(nodes) {
+    var singleLevel = {};
+    // TODO
+    return nodes;
 }
 

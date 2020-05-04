@@ -4,16 +4,18 @@
         return;
     }
 
-    var glbFile = await fetch("/models/suzanne_texture.glb")
+    var adapter = await navigator.gpu.requestAdapter();
+    var device = await adapter.requestDevice();
+
+    var glbFile = await fetch("/models/FlightHelmet.glb")
         .then(res => res.arrayBuffer());
-    console.log(glbFile);
+
     // The file header and chunk 0 header
     // TODO: It sounds like the spec does allow for multiple binary chunks,
     // so then how do you know which chunk a buffer exists in? Maybe the buffer id
     // corresponds to the binary chunk ID? Would have to find info in the spec
     // or an example file to check this
     var header = new Uint32Array(glbFile, 0, 5);
-    console.log(header);
     if (header[0] != 0x46546C67) {
         alert("This does not appear to be a glb file?");
         return;
@@ -24,8 +26,7 @@
     console.log(glbJsonData);
 
     var binaryHeader = new Uint32Array(glbFile, 20 + header[3], 2);
-    console.log(binaryHeader);
-    var glbBuffer = new GLTFBuffer(glbFile, binaryHeader[0], 28 + header[3], binaryHeader[0]);
+    var glbBuffer = new GLTFBuffer(glbFile, binaryHeader[0], 28 + header[3]);
 
     if (28 + header[3] + binaryHeader[0] != glbFile.byteLength) {
         console.log("TODO: Multiple binary chunks in file");
@@ -59,17 +60,38 @@
             accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
             var texcoords = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
 
-            primitives.push(new GLTFPrimitive(indices, positions, normals, texcoords));
+            var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords);
+            gltfPrim.upload(device);
+            primitives.push(gltfPrim);
         }
         meshes.push(new GLTFMesh(mesh["name"], primitives));
     }
     console.log(meshes);
 
-    var adapter = await navigator.gpu.requestAdapter();
-    var device = await adapter.requestDevice();
+    var nodeBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 1,
+                visibility: GPUShaderStage.VERTEX,
+                type: "uniform-buffer"
+            }
+        ]
+    });
+
+    var nodes = []
+    var gltfNodes = makeGLTFSingleLevel(glbJsonData["nodes"]);
+    for (var i = 0; i < gltfNodes.length; ++i) {
+        var n = gltfNodes[i];
+        if (n["mesh"]) {
+            var node = new GLTFNode(n["name"], meshes[n["mesh"]], readNodeTransform(n));
+            node.upload(device, nodeBindGroupLayout);
+            nodes.push(node);
+        }
+    }
 
     // Just a basic test for loading textures and using them: assume image 0 is the
     // one used by the model as its base color
+    /*
     var imageTexture = null;
     {
         console.log("making img view");
@@ -95,6 +117,7 @@
         };
         device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
     }
+    */
 
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
@@ -129,35 +152,6 @@
         }
     };
 
-    var [indexBuf, indexBufMapping] = device.createBufferMapped({
-        size: meshes[0].primitives[0].indices.byteLength(),
-        usage: GPUBufferUsage.INDEX
-    });
-    // TODO wrapper util to upload the primitive buffer
-    new Uint16Array(indexBufMapping).set(meshes[0].primitives[0].indices.view)
-    indexBuf.unmap();
-
-    var [vertexBuf, vertexBufMapping] = device.createBufferMapped({
-        size: meshes[0].primitives[0].positions.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    new Float32Array(vertexBufMapping).set(meshes[0].primitives[0].positions.view);
-    vertexBuf.unmap();
-
-    var [normalBuf, normalBufMapping] = device.createBufferMapped({
-        size: meshes[0].primitives[0].normals.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    new Float32Array(normalBufMapping).set(meshes[0].primitives[0].normals.view);
-    normalBuf.unmap();
-
-    var [texcoordBuf, texcoordBufMapping] = device.createBufferMapped({
-        size: meshes[0].primitives[0].texcoords.byteLength(),
-        usage: GPUBufferUsage.VERTEX
-    });
-    new Float32Array(texcoordBufMapping).set(meshes[0].primitives[0].texcoords.view);
-    texcoordBuf.unmap();
-
     var vertModule = device.createShaderModule({code: glb_vert_spv});
     var fragModule = device.createShaderModule({code: glb_frag_spv});
 
@@ -172,20 +166,12 @@
                 binding: 0,
                 visibility: GPUShaderStage.VERTEX,
                 type: "uniform-buffer"
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.FRAGMENT,
-                type: "sampler"
-            },
-            {
-                binding: 2,
-                visibility: GPUShaderStage.FRAGMENT,
-                type: "sampled-texture"
             }
         ]
     });
-    var layout = device.createPipelineLayout({bindGroupLayouts: [bindGroupLayout]});
+    var layout = device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout, nodeBindGroupLayout]
+    });
 
     var viewParamBuf = device.createBuffer({
         size: 4 * 4 * 4,
@@ -199,14 +185,6 @@
                 resource: {
                     buffer: viewParamBuf
                 }
-            },
-            {
-                binding: 1,
-                resource: sampler
-            },
-            {
-                binding: 2,
-                resource: imageTexture.createView()
             }
         ]
     });
@@ -309,11 +287,19 @@
 
         renderPass.setPipeline(renderPipeline);
         renderPass.setBindGroup(0, bindGroup);
-        renderPass.setIndexBuffer(indexBuf, 0, 0);
-        renderPass.setVertexBuffer(0, vertexBuf, 0, 0);
-        renderPass.setVertexBuffer(1, normalBuf, 0, 0);
-        renderPass.setVertexBuffer(2, texcoordBuf, 0, 0);
-        renderPass.drawIndexed(meshes[0].primitives[0].indices.count, 1, 0, 0, 0);
+
+        for (var i = 0; i < nodes.length; ++i) {
+            var n = nodes[i];
+            renderPass.setBindGroup(1, n.bindGroup);
+            for (var j = 0; j < n.mesh.primitives.length; ++j) {
+                var p = n.mesh.primitives[j];
+                renderPass.setIndexBuffer(p.gpuIndices, 0, 0);
+                renderPass.setVertexBuffer(0, p.gpuPositions, 0, 0);
+                renderPass.setVertexBuffer(1, p.gpuNormals, 0, 0);
+                renderPass.setVertexBuffer(2, p.gpuTexcoords, 0, 0);
+                renderPass.drawIndexed(p.indices.count, 1, 0, 0, 0);
+            }
+        }
 
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
