@@ -4,7 +4,7 @@
         return;
     }
 
-    var glbFile = await fetch("/models/suzanne.glb")
+    var glbFile = await fetch("/models/suzanne_texture.glb")
         .then(res => res.arrayBuffer());
     console.log(glbFile);
     // The file header and chunk 0 header
@@ -25,7 +25,7 @@
 
     var binaryHeader = new Uint32Array(glbFile, 20 + header[3], 2);
     console.log(binaryHeader);
-    var glbBuffer = new GLTFBuffer(new Uint8Array(glbFile, 28 + header[3], binaryHeader[0]), binaryHeader[0]);
+    var glbBuffer = new GLTFBuffer(glbFile, binaryHeader[0], 28 + header[3], binaryHeader[0]);
 
     if (28 + header[3] + binaryHeader[0] != glbFile.byteLength) {
         console.log("TODO: Multiple binary chunks in file");
@@ -48,7 +48,6 @@
             var accessor = glbJsonData["accessors"][prim["indices"]]
 
             var indices = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
-            console.log(indices);
 
             accessor = glbJsonData["accessors"][prim["attributes"]["POSITION"]];
             var positions = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
@@ -56,7 +55,11 @@
             accessor = glbJsonData["accessors"][prim["attributes"]["NORMAL"]];
             var normals = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
 
-            primitives.push(new GLTFPrimitive(indices, positions, normals));
+            // TODO: Should instead loop through since there may be multiple texcoord attributes
+            accessor = glbJsonData["accessors"][prim["attributes"]["TEXCOORD_0"]];
+            var texcoords = makeGLTFAccessor(glbBuffer, glbJsonData["bufferViews"][accessor["bufferView"]], accessor);
+
+            primitives.push(new GLTFPrimitive(indices, positions, normals, texcoords));
         }
         meshes.push(new GLTFMesh(mesh["name"], primitives));
     }
@@ -64,6 +67,34 @@
 
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
+
+    // Just a basic test for loading textures and using them: assume image 0 is the
+    // one used by the model as its base color
+    var imageTexture = null;
+    {
+        console.log("making img view");
+        var imageView = new GLTFBufferView(glbBuffer, glbJsonData["bufferViews"][glbJsonData["images"][0]["bufferView"]]);
+        console.log(imageView);
+        var imgBlob = new Blob([imageView.buffer], {type: glbJsonData["images"][0]["mimeType"]});
+        console.log(imgBlob);
+
+        var img = await createImageBitmap(imgBlob);
+        console.log(img);
+
+        imageTexture = device.createTexture({
+            size: [img.width, img.height, 1],
+            format: "rgba8unorm",
+            usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
+        });
+
+        var copySrc = {
+            imageBitmap: img
+        };
+        var copyDst = {
+            texture: imageTexture
+        };
+        device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
+    }
 
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
@@ -120,8 +151,20 @@
     new Float32Array(normalBufMapping).set(meshes[0].primitives[0].normals.view);
     normalBuf.unmap();
 
+    var [texcoordBuf, texcoordBufMapping] = device.createBufferMapped({
+        size: meshes[0].primitives[0].texcoords.byteLength(),
+        usage: GPUBufferUsage.VERTEX
+    });
+    new Float32Array(texcoordBufMapping).set(meshes[0].primitives[0].texcoords.view);
+    texcoordBuf.unmap();
+
     var vertModule = device.createShaderModule({code: glb_vert_spv});
     var fragModule = device.createShaderModule({code: glb_frag_spv});
+
+    var sampler = device.createSampler({
+        magFilter: "linear",
+        minFilter: "linear"
+    });
 
     var bindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -129,6 +172,16 @@
                 binding: 0,
                 visibility: GPUShaderStage.VERTEX,
                 type: "uniform-buffer"
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "sampler"
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "sampled-texture"
             }
         ]
     });
@@ -146,6 +199,14 @@
                 resource: {
                     buffer: viewParamBuf
                 }
+            },
+            {
+                binding: 1,
+                resource: sampler
+            },
+            {
+                binding: 2,
+                resource: imageTexture.createView()
             }
         ]
     });
@@ -182,6 +243,16 @@
                             format: "float3",
                             offset: 0,
                             shaderLocation: 1
+                        }
+                    ]
+                },
+                {
+                    arrayStride: 2 * 4,
+                    attributes: [
+                        {
+                            format: "float2",
+                            offset: 0,
+                            shaderLocation: 2
                         }
                     ]
                 }
@@ -241,6 +312,7 @@
         renderPass.setIndexBuffer(indexBuf, 0, 0);
         renderPass.setVertexBuffer(0, vertexBuf, 0, 0);
         renderPass.setVertexBuffer(1, normalBuf, 0, 0);
+        renderPass.setVertexBuffer(2, texcoordBuf, 0, 0);
         renderPass.drawIndexed(meshes[0].primitives[0].indices.count, 1, 0, 0, 0);
 
         renderPass.endPass();

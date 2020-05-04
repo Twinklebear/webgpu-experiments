@@ -89,15 +89,20 @@ var gltfTypeToWebGPU = function(componentType, type) {
 }
 
 // Create a GLTFBuffer referencing some ArrayBuffer
-var GLTFBuffer = function(buffer, size) {
-    this.buffer = buffer;
+var GLTFBuffer = function(buffer, size, offset) {
+    this.arrayBuffer = buffer;
     this.size = size;
+    this.offset = offset;
 }
 
 var GLTFBufferView = function(buffer, view) {
-    this.buffer = new Uint8Array(buffer.buffer, view["byteOffset"], view["byteLength"]);
     this.length = view["byteLength"];
-    this.offset = view["byteOffset"];
+    this.offset = view["byteOffset"] + buffer.offset;
+    this.buffer = new Uint8Array(buffer.arrayBuffer, this.offset, this.length);
+}
+
+GLTFBufferView.prototype.arrayBuffer = function() {
+    return this.buffer.buffer;
 }
 
 var GLTFAccessor = function(view, accessor) {
@@ -108,28 +113,28 @@ var GLTFAccessor = function(view, accessor) {
     var numScalars = this.count * this.numComponents;
     switch (this.componentType) {
         case GLTFComponentType.BYTE:
-            this.view = new Int8Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Int8Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.UNSIGNED_BYTE:
-            this.view = new Uint8Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Uint8Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.SHORT:
-            this.view = new Int16Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Int16Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.UNSIGNED_SHORT:
-            this.view = new Uint16Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Uint16Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.INT:
-            this.view = new Int32Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Int32Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.UNSIGNED_INT:
-            this.view = new Uint32Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Uint32Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.FLOAT:
-            this.view = new Float32Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Float32Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         case GLTFComponentType.DOUBLE:
-            this.view = new Float64Array(view.buffer.buffer, view.offset, numScalars);
+            this.view = new Float64Array(view.arrayBuffer(), view.offset, numScalars);
             break;
         default:
             alert("Unrecognized GLTF Component Type?");
