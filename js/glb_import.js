@@ -194,6 +194,9 @@ var GLTFPrimitive = function(indices, positions, normals, texcoords) {
 GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncoder, shaderModules,
     swapChainFormat, depthFormat)
 {
+    var vertexStage = shaderModules.posVert;
+    var fragmentStage = shaderModules.posFrag;
+
     var vertexBuffers = [
         {
             arrayStride: this.positions.byteStride(),
@@ -206,8 +209,10 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
             ]
         }
     ];
-    // TODO: Are normals are always required for GLB? 
     if (this.normals) {
+        vertexStage = shaderModules.posNormalVert;
+        fragmentStage = shaderModules.posNormalFrag;
+
         vertexBuffers.push({
             arrayStride: this.normals.byteStride(),
             attributes: [
@@ -219,8 +224,15 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
             ]
         });
     }
-    /*
     if (this.texcoords) {
+        if (this.normals) {
+            vertexStage = shaderModules.posNormalUVVert;
+            fragmentStage = shaderModules.posNormalUVFrag;
+        } else {
+            vertexStage = shaderModules.posUVVert;
+            fragmentStage = shaderModules.posUVFrag;
+        }
+
         vertexBuffers.push({
             arrayStride: this.texcoords.byteStride(),
             attributes: [
@@ -232,20 +244,13 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, layout, bundleEncod
             ]
         });
     }
-    */
 
     var indexFormat = this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
 
     var renderPipeline = device.createRenderPipeline({
         layout: layout,
-        vertexStage: {
-            module: shaderModules.simpleVert,
-            entryPoint: "main"
-        },
-        fragmentStage: {
-            module: shaderModules.simpleFrag,
-            entryPoint: "main"
-        },
+        vertexStage: vertexStage,
+        fragmentStage: fragmentStage,
         primitiveTopology: "triangle-list",
         vertexState: {
             indexFormat: indexFormat,

@@ -7,8 +7,10 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    var glbFile = await fetch("/models/2CylinderEngine.glb")
+    //var glbFile = await fetch("/models/2CylinderEngine.glb")
     //var glbFile = await fetch("/models/suzanne.glb")
+    //var glbFile = await fetch("/models/sponza.glb")
+    var glbFile = await fetch("/models/DamagedHelmet.glb")
         .then(res => res.arrayBuffer());
 
     // The file header and chunk 0 header
@@ -171,8 +173,38 @@
     };
 
     var shaderModules = {
-        simpleVert: device.createShaderModule({code: glb_vert_spv}),
-        simpleFrag: device.createShaderModule({code: glb_frag_spv}),
+        posVert: {
+            module: device.createShaderModule({code: glb_pos_vert_spv}),
+            entryPoint: "main",
+        },
+        posFrag: {
+            module: device.createShaderModule({code: glb_pos_frag_spv}),
+            entryPoint: "main",
+        },
+        posNormalVert: {
+            module: device.createShaderModule({code: glb_posnormal_vert_spv}),
+            entryPoint: "main",
+        },
+        posNormalFrag: {
+            module: device.createShaderModule({code: glb_posnormal_frag_spv}),
+            entryPoint: "main",
+        },
+        posNormalUVVert: {
+            module: device.createShaderModule({code: glb_posnormaluv_vert_spv}),
+            entryPoint: "main",
+        },
+        posNormalUVFrag: {
+            module: device.createShaderModule({code: glb_posnormaluv_frag_spv}),
+            entryPoint: "main",
+        },
+        posUVVert: {
+            module: device.createShaderModule({code: glb_posuv_vert_spv}),
+            entryPoint: "main",
+        },
+        posUVFrag: {
+            module: device.createShaderModule({code: glb_posuv_frag_spv}),
+            entryPoint: "main",
+        },
     };
 
     var sampler = device.createSampler({
@@ -261,5 +293,4 @@
     }
     requestAnimationFrame(frame);
 })();
-
 

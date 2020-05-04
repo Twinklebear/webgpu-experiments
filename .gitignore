@@ -2,4 +2,5 @@
 *.raw
 *.spv
 shaders/embedded_spv.js
+shaders/glb_shaders.js
 models/
