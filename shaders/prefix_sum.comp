@@ -1,0 +1,13 @@
+#version 450 core
+
+layout(local_size_x = 1) in;
+
+layout(set = 0, binding = 0, std430) buffer Data {
+    float vals[];
+};
+
+void main(void) {
+    // Note: gl_NumWorkGroups crashes on Chrome Canary
+    vals[gl_GlobalInvocationID.x] = gl_GlobalInvocationID.x;
+}
+

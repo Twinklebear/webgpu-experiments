@@ -3,4 +3,5 @@
 *.spv
 shaders/embedded_spv.js
 shaders/glb_shaders.js
+shaders/embed_marching_cubes_shaders.js
 models/
