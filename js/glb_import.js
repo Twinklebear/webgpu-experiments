@@ -245,6 +245,10 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, bindGroupLayouts, b
             ]
         });
     }
+    if (this.material.baseColorTexture) {
+        vertexStage = shaderModules.pnuTexturedVert;
+        fragmentStage = shaderModules.pnuTexturedFrag;
+    }
 
     var layout = device.createPipelineLayout({
         bindGroupLayouts: [bindGroupLayouts[0], bindGroupLayouts[1], this.material.bindGroupLayout],
@@ -408,8 +412,9 @@ var makeGLTFSingleLevel = function(nodes) {
     return nodes;
 }
 
-var GLTFMaterial = function(material) {
+var GLTFMaterial = function(material, textures) {
     this.baseColorFactor = [1, 1, 1, 1];
+    this.baseColorTexture = null;
     // padded to float4
     this.emissiveFactor = [0, 0, 0, 1];
     this.metallicFactor = 1.0;
@@ -419,6 +424,10 @@ var GLTFMaterial = function(material) {
         var pbr = material["pbrMetallicRoughness"];
         if (pbr["baseColorFactor"] !== undefined) {
             this.baseColorFactor = pbr["baseColorFactor"];
+        }
+        if (pbr["baseColorTexture"] !== undefined) {
+            // TODO multiple texcoords
+            this.baseColorTexture = textures[pbr["baseColorTexture"]["index"]];
         }
         if (pbr["metallicFactor"] !== undefined) {
             this.metallicFactor = pbr["metallicFactor"];
@@ -450,26 +459,94 @@ GLTFMaterial.prototype.upload = function(device) {
     buf.unmap();
     this.gpuBuffer = buf;
 
-    this.bindGroupLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.FRAGMENT,
-                type: "uniform-buffer"
+    var layoutEntries = [
+        {
+            binding: 0,
+            visibility: GPUShaderStage.FRAGMENT,
+            type: "uniform-buffer"
+        }
+    ];
+    var bindGroupEntries = [
+        {
+            binding: 0,
+            resource: {
+                buffer: this.gpuBuffer,
             }
-        ]
+        }
+    ];
+
+    if (this.baseColorTexture) {
+        layoutEntries.push({
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            type: "sampler"
+        });
+        layoutEntries.push({
+            binding: 2,
+            visibility: GPUShaderStage.FRAGMENT,
+            type: "sampled-texture"
+        });
+
+        bindGroupEntries.push({
+            binding: 1,
+            resource: this.baseColorTexture.sampler,
+        });
+        bindGroupEntries.push({
+            binding: 2,
+            resource: this.baseColorTexture.imageView,
+        });
+    }
+
+    this.bindGroupLayout = device.createBindGroupLayout({
+        entries: layoutEntries
     });
 
     this.bindGroup = device.createBindGroup({
         layout: this.bindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: this.gpuBuffer,
-                }
-            }
-        ]
+        entries: bindGroupEntries,
     });
+}
+
+var GLTFSampler = function(sampler, device) {
+    var magFilter = sampler["magFilter"] === undefined || sampler["magFilter"] == GLTFTextureFilter.LINEAR ?
+        "linear" : "nearest";
+    var minFilter = sampler["minFilter"] === undefined || sampler["minFilter"] == GLTFTextureFilter.LINEAR ?
+        "linear" : "nearest";
+
+    var wrapS = "repeat";
+    if (sampler["wrapS"] !== undefined) {
+        if (sampler["wrapS"] == GLTFTextureFilter.REPEAT) {
+            wrapS = "repeat";
+        } else if (sample["wrapS"] == GLTFTextureFilter.CLAMP_TO_EDGE) {
+            wrapS = "clamp-to-edge";
+        } else {
+            wrapS = "mirror-repeat";
+        }
+    }
+
+    var wrapT = "repeat";
+    if (sampler["wrapT"] !== undefined) {
+        if (sampler["wrapT"] == GLTFTextureFilter.REPEAT) {
+            wrapT = "repeat";
+        } else if (sample["wrapT"] == GLTFTextureFilter.CLAMP_TO_EDGE) {
+            wrapT = "clamp-to-edge";
+        } else {
+            wrapT = "mirror-repeat";
+        }
+    }
+
+    this.sampler = device.createSampler({
+        magFilter: magFilter,
+        minFilter: minFilter,
+        addressModeU: wrapS,
+        addressModeV: wrapT,
+    });
+}
+
+var GLTFTexture = function(sampler, image) {
+    this.gltfsampler = sampler;
+    this.sampler = sampler.sampler;
+    this.image = image;
+    this.imageView = image.createView();
 }
 

@@ -14,6 +14,7 @@ variants = {
     "posnormal": ["-DNORMAL_ATTRIB=1"],
     "posnormaluv": ["-DNORMAL_ATTRIB=1", "-DUV_ATTRIB=1"],
     "posuv": ["-DUV_ATTRIB=1"],
+    "pnutex": ["-DNORMAL_ATTRIB=1", "-DUV_ATTRIB=1", "-DBASE_COLOR_TEXTURE=1"],
 }
 
 try:

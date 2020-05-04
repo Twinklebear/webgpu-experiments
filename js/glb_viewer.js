@@ -7,9 +7,10 @@
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
-    var glbFile = await fetch("/models/2CylinderEngine.glb")
-    //var glbFile = await fetch("/models/suzanne.glb")
-    //var glbFile = await fetch("/models/sponza.glb")
+    //var glbFile = await fetch("/models/2CylinderEngine.glb")
+    //var glbFile = await fetch("/models/suzanne_texture.glb")
+    //var glbFile = await fetch("/models/FlightHelmet.glb")
+    var glbFile = await fetch("/models/sponza.glb")
     //var glbFile = await fetch("/models/DamagedHelmet.glb")
         .then(res => res.arrayBuffer());
 
@@ -42,10 +43,56 @@
         bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
     }
 
+    var images = [];
+    if (glbJsonData["images"] !== undefined) {
+        for (var i = 0; i < glbJsonData["images"].length; ++i) {
+            var imgJson = glbJsonData["images"][i];
+            var imageView = new GLTFBufferView(glbBuffer, glbJsonData["bufferViews"][imgJson["bufferView"]]);
+            var imgBlob = new Blob([imageView.buffer], {type: imgJson["mime/type"]});
+            var img = await createImageBitmap(imgBlob);
+
+            // TODO: For glTF we need to look at where an image is used to know if
+            // it should be srgb or not. We basically need to pass through the material list
+            // and find if the texture which uses this image is used by a metallic/roughness param
+            var gpuImg = device.createTexture({
+                size: [img.width, img.height, 1],
+                format: "rgba8unorm-srgb",
+                usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
+            });
+
+            var copySrc = {
+                imageBitmap: img
+            };
+            var copyDst = {
+                texture: gpuImg
+            };
+            device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
+
+            images.push(gpuImg);
+        }
+    }
+
+    var defaultSampler = new GLTFSampler({}, device);
+    var samplers = [];
+    if (glbJsonData["samplers"] !== undefined) {
+        for (var i = 0; i < glbJsonData["samplers"].length; ++i) {
+            samplers.push(new GLTFSampler(glbJsonData["samplers"][i], device));
+        }
+    }
+
+    var textures = [];
+    if (glbJsonData["textures"] !== undefined) {
+        for (var i = 0; i < glbJsonData["textures"].length; ++i) {
+            var tex = glbJsonData["textures"][i];
+            var sampler = tex["sampler"] !== undefined ? samplers[tex["sampler"]] : defaultSampler;
+            textures.push(new GLTFTexture(sampler, images[tex["source"]]));
+        }
+    }
+
     var defaultMaterial = new GLTFMaterial({});
     var materials = [];
     for (var i = 0; i < glbJsonData["materials"].length; ++i) {
-        materials.push(new GLTFMaterial(glbJsonData["materials"][i]));
+        materials.push(new GLTFMaterial(glbJsonData["materials"][i], textures));
     }
     console.log(materials);
 
@@ -125,36 +172,6 @@
     }
     console.log(nodes);
 
-    // Just a basic test for loading textures and using them: assume image 0 is the
-    // one used by the model as its base color
-    /*
-    var imageTexture = null;
-    {
-        console.log("making img view");
-        var imageView = new GLTFBufferView(glbBuffer, glbJsonData["bufferViews"][glbJsonData["images"][0]["bufferView"]]);
-        console.log(imageView);
-        var imgBlob = new Blob([imageView.buffer], {type: glbJsonData["images"][0]["mimeType"]});
-        console.log(imgBlob);
-
-        var img = await createImageBitmap(imgBlob);
-        console.log(img);
-
-        imageTexture = device.createTexture({
-            size: [img.width, img.height, 1],
-            format: "rgba8unorm",
-            usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
-        });
-
-        var copySrc = {
-            imageBitmap: img
-        };
-        var copyDst = {
-            texture: imageTexture
-        };
-        device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
-    }
-    */
-
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
     var swapChainFormat = "bgra8unorm";
@@ -221,6 +238,14 @@
             module: device.createShaderModule({code: glb_posuv_frag_spv}),
             entryPoint: "main",
         },
+        pnuTexturedVert: {
+            module: device.createShaderModule({code: glb_pnutex_vert_spv}),
+            entryPoint: "main",
+        },
+        pnuTexturedFrag: {
+            module: device.createShaderModule({code: glb_pnutex_frag_spv}),
+            entryPoint: "main",
+        },
     };
 
     var sampler = device.createSampler({
@@ -279,7 +304,7 @@
 			camera.pan([cur[0] - prev[0], prev[1] - cur[1]]);
 		}
 	};
-	controller.wheel = function(amt) { camera.zoom(amt); };
+	controller.wheel = function(amt) { camera.zoom(amt * 0.5); };
 	controller.pinch = controller.wheel;
 	controller.twoFingerDrag = function(drag) { camera.pan(drag); };
 	controller.registerForCanvas(canvas);
