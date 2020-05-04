@@ -2,3 +2,4 @@
 *.raw
 *.spv
 shaders/embedded_spv.js
+models/
