@@ -1,7 +1,5 @@
 #version 450 core
 
-// See https://www.eecs.umich.edu/courses/eecs570/hw/parprefix.pdf
-
 #define CHUNK_SIZE 8
 layout(local_size_x = CHUNK_SIZE / 2) in;
 
@@ -31,6 +29,7 @@ void main(void) {
         offs = offs << 1;
     }
 
+    // For the multichunk thing we won't want to zero this out I think?
     if (gl_LocalInvocationID.x == 0) {
         block_sums[gl_WorkGroupID.x] = chunk[CHUNK_SIZE - 1];
         chunk[CHUNK_SIZE - 1] = 0;
@@ -52,4 +51,5 @@ void main(void) {
     vals[2 * gl_GlobalInvocationID.x] = chunk[2 * gl_LocalInvocationID.x];
     vals[2 * gl_GlobalInvocationID.x + 1] = chunk[2 * gl_LocalInvocationID.x + 1];
 }
+
 

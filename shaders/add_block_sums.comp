@@ -11,28 +11,23 @@ layout(set = 0, binding = 1, std430) buffer BlockSums {
     float block_sums[];
 };
 
-/*
 layout(set = 0, binding = 2, std430) buffer CarryInOut {
     float carry_in;
     float carry_out;
 };
 
-
-// Note: gl_NumWorkGroups crashes Chrome Canary, have to send through myself for now
-layout(set = 0, binding = 3, std430) buffer NumWorkGroups {
+// Note 5/5/2020: gl_NumWorkGroups crashes Chrome Canary, have to send through myself for now
+layout(set = 0, binding = 3, std140) uniform NumWorkGroupsUnif {
     uvec4 NumWorkGroups;
-}
-*/
+};
 
 void main(void) {
-    const float prev_sum = block_sums[gl_WorkGroupID.x];// + carry_in;
+    const float prev_sum = block_sums[gl_WorkGroupID.x] + carry_in;
     vals[2 * gl_GlobalInvocationID.x] += prev_sum;
     vals[2 * gl_GlobalInvocationID.x + 1] += prev_sum;
 
-    /*
-    if (gl_GlobalInvocationID.x == NumWorkGroups.x * gl_WorkGroupSize.x) {
+    if (gl_GlobalInvocationID.x + 1 == NumWorkGroups.x * gl_WorkGroupSize.x) {
         carry_out = vals[2 * gl_GlobalInvocationID.x + 1];
     }
-    */
 }
 

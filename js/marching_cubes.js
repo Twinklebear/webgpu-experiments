@@ -19,6 +19,12 @@
     console.log("serial scan");
     console.log(serialOut);
 
+    var totalSum = 0;
+    for (var i = 0; i < array.length; ++i) {
+        totalSum += array[i];
+    }
+    console.log(`Total sum = ${totalSum}`);
+
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
@@ -50,12 +56,18 @@
     console.log(new Float32Array(mapping));
     blockSumBuf.unmap();
 
-    // TODO: Need way to not pass block sum buffer as well, to have scan
-    // skip writing it out or requiring it in the pipeline
-    var scratchBuf = device.createBuffer({
-        size: nblockSums * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    // TODO: between each chunk copy the carry out to be the new carry in
+    var [carryInOutBuf, mapping] = device.createBufferMapped({
+        size: 8,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
+    new Float32Array(mapping).fill(0.0);
+    carryInOutBuf.unmap();
+
+    var numWorkGroupsBuf = device.createBuffer({
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    })
 
     var computeBindGroupLayout = device.createBindGroupLayout({
         entries: [
@@ -89,36 +101,101 @@
             }
         ]
     });
+
+    var scanBlockBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            }
+        ]
+    });
     var scanBlockBindGroup = device.createBindGroup({
-        layout: computeBindGroupLayout,
+        layout: scanBlockBindGroupLayout,
         entries: [
             {
                 binding: 0,
                 resource: {
                     buffer: blockSumBuf
                 }
+            }
+        ]
+    });
+
+    var addBlockSumsBindGroupLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
+            },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "uniform-buffer"
+            }
+        ]
+    });
+    var addBlockSumsBindGroup = device.createBindGroup({
+        layout: addBlockSumsBindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: dataBuf
+                }
             },
             {
                 binding: 1,
                 resource: {
-                    buffer: scratchBuf
+                    buffer: blockSumBuf
+                }
+            },
+            {
+                binding: 2,
+                resource: {
+                    buffer: carryInOutBuf
+                }
+            },
+            {
+                binding: 3,
+                resource: {
+                    buffer: numWorkGroupsBuf
                 }
             }
         ]
     });
 
-    var computeLayout = device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]});
 
     var scanPipeline = device.createComputePipeline({
-        layout: computeLayout,
+        layout: device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]}),
         computeStage: {
             module: device.createShaderModule({code: prefix_sum_comp_spv}),
             entryPoint: "main"
         }
     });
 
+    var blockResultScanPipeline = device.createComputePipeline({
+        layout: device.createPipelineLayout({bindGroupLayouts: [scanBlockBindGroupLayout]}),
+        computeStage: {
+            module: device.createShaderModule({code: block_prefix_sum_comp_spv}),
+            entryPoint: "main"
+        }
+    });
+
     var addBlockSumsPipeline = device.createComputePipeline({
-        layout: computeLayout,
+        layout: device.createPipelineLayout({bindGroupLayouts: [addBlockSumsBindGroupLayout]}),
         computeStage: {
             module: device.createShaderModule({code: add_block_sums_comp_spv}),
             entryPoint: "main"
@@ -133,8 +210,22 @@
         size: nblockSums * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
+    var readbackCarry = device.createBuffer({
+        size: 8,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
 
     var commandEncoder = device.createCommandEncoder();
+
+    // Write the number of workgroups, since we need to send this ourselves right now
+    var [upload, uploadMap] = device.createBufferMapped({
+        size: 16,
+        usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC
+    });
+    new Uint32Array(uploadMap).set([array.length / workGroupElements, 1, 1, 1]);
+    upload.unmap();
+
+    commandEncoder.copyBufferToBuffer(upload, 0, numWorkGroupsBuf, 0, 16);
 
     var computePass = commandEncoder.beginComputePass();
 
@@ -150,17 +241,19 @@
     // the additional offset from the previously computed results. This is a bit
     // easier to implement than implementing some scan tree over the blocks and doing
     // some scans on the block chunks
+    computePass.setPipeline(blockResultScanPipeline);
     computePass.setBindGroup(0, scanBlockBindGroup);
     computePass.dispatch(1, 1, 1);
     
     computePass.setPipeline(addBlockSumsPipeline);
-    computePass.setBindGroup(0, scanInputBindGroup);
+    computePass.setBindGroup(0, addBlockSumsBindGroup);
     computePass.dispatch(array.length / workGroupElements, 1, 1);
 
     computePass.endPass();
 
     commandEncoder.copyBufferToBuffer(dataBuf, 0, readbackBuf, 0, array.length * 4);
     commandEncoder.copyBufferToBuffer(blockSumBuf, 0, readbackBlockSums, 0, nblockSums * 4);
+    commandEncoder.copyBufferToBuffer(carryInOutBuf, 0, readbackCarry, 0, 8);
 
     device.defaultQueue.submit([commandEncoder.finish()]);
 
@@ -183,6 +276,13 @@
     var mapping = new Float32Array(await readbackBlockSums.mapReadAsync());
     console.log("block sums:");
     console.log(mapping);
+    readbackBlockSums.unmap();
+
+    var mapping = new Float32Array(await readbackCarry.mapReadAsync());
+    console.log("carry out:");
+    console.log(mapping);
+    console.log(`parallel sum = ${mapping[1] + array[array.length - 1]}`);
+    readbackCarry.unmap();
 })();
 
 
