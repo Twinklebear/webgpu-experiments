@@ -1,38 +1,4 @@
 (async () => {
-    var reducePhase = function(array) {
-        // TODO: handle non pow2 size
-        for (var d = 0; d < Math.log2(array.length); ++d) {
-            for (var k = 0; k < array.length; k += Math.pow(2, d + 1)) {
-                array[k + Math.pow(2, d + 1) - 1] = 
-                    array[k + Math.pow(2, d) - 1] +
-                    array[k + Math.pow(2, d + 1) - 1];
-            }
-        }
-    }
-
-    var downSweep = function(array) {
-        array[array.length - 1] = 0;
-        for (var d = Math.log2(array.length) - 1; d >= 0; --d) {
-            for (var k = 0; k < array.length; k += Math.pow(2, d + 1)) {
-                var tmp = array[k + Math.pow(2, d) - 1];
-                array[k + Math.pow(2, d) - 1] = array[k + Math.pow(2, d + 1) - 1];
-                array[k + Math.pow(2, d + 1) - 1] = tmp + array[k + Math.pow(2, d + 1) - 1];
-            }
-        }
-    }
-
-    var exclusiveScan = function(array) {
-        var output = Array.from(array);
-        reducePhase(output);
-        console.log("After reduce");
-        console.log(output);
-
-        downSweep(output);
-        console.log("After down sweep");
-        console.log(output);
-        return output;
-    }
-
     var serialExclusiveScan = function(array) {
         var output = Array.from(array);
         output[0] = 0;
@@ -42,20 +8,16 @@
         return output;
     }
 
-    var array = [1, 2, 3, 4];
-    var out = exclusiveScan(array);
-    console.log(out);
-
+    var workGroupSize = 4;
+    var workGroupElements = workGroupSize * 2;
+    var array = [];
+    for (var i = 0; i < workGroupElements * 4; ++i) {
+        array.push(i);
+    }
+    console.log(array);
     var serialOut = serialExclusiveScan(array);
     console.log("serial scan");
     console.log(serialOut);
-
-    var equivalent = out.every(function(v, i) { return v == serialOut[i]; });
-    if (!equivalent) {
-        console.log("Parallel does not match serial");
-    } else {
-        console.log("Results match");
-    }
 
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
@@ -69,14 +31,29 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var valsPerGroup = 1;
-    var groupSize = 1;
-    var ngroups = 2;
-    var totalVals = valsPerGroup * groupSize * ngroups;
+    // Input buffer
+    var [dataBuf, mapping] = device.createBufferMapped({
+        size: array.length * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    new Float32Array(mapping).set(array);
+    dataBuf.unmap();
 
-    // Setup compute pass to generate our "vertices"
-    var dataBuf = device.createBuffer({
-        size: totalVals * 4,
+    // Block sum buffer, padded up to workGroupElements size
+    var nblockSums = Math.max(array.length / workGroupElements, workGroupElements);
+    console.log(`num block sums ${nblockSums}`);
+    var [blockSumBuf, mapping] = device.createBufferMapped({
+        size: nblockSums * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    new Float32Array(mapping).fill(0);
+    console.log(new Float32Array(mapping));
+    blockSumBuf.unmap();
+
+    // TODO: Need way to not pass block sum buffer as well, to have scan
+    // skip writing it out or requiring it in the pipeline
+    var scratchBuf = device.createBuffer({
+        size: nblockSums * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });
 
@@ -86,10 +63,16 @@
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer"
+            },
+            {
+                binding: 1,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "storage-buffer"
             }
         ]
     });
-    var computeBindGroup = device.createBindGroup({
+
+    var scanInputBindGroup = device.createBindGroup({
         layout: computeBindGroupLayout,
         entries: [
             {
@@ -97,36 +80,87 @@
                 resource: {
                     buffer: dataBuf
                 }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: blockSumBuf
+                }
             }
         ]
     });
+    var scanBlockBindGroup = device.createBindGroup({
+        layout: computeBindGroupLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: blockSumBuf
+                }
+            },
+            {
+                binding: 1,
+                resource: {
+                    buffer: scratchBuf
+                }
+            }
+        ]
+    });
+
     var computeLayout = device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]});
 
-    var computePipeline = device.createComputePipeline({
+    var scanPipeline = device.createComputePipeline({
         layout: computeLayout,
         computeStage: {
-            module: device.createShaderModule({code: prefix_sum_comp}),
+            module: device.createShaderModule({code: prefix_sum_comp_spv}),
+            entryPoint: "main"
+        }
+    });
+
+    var addBlockSumsPipeline = device.createComputePipeline({
+        layout: computeLayout,
+        computeStage: {
+            module: device.createShaderModule({code: add_block_sums_comp_spv}),
             entryPoint: "main"
         }
     });
 
     var readbackBuf = device.createBuffer({
-        size: totalVals * 4,
+        size: array.length * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    var readbackBlockSums = device.createBuffer({
+        size: nblockSums * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
     var commandEncoder = device.createCommandEncoder();
 
-    console.log(`ngroups ${ngroups}`);
-
     var computePass = commandEncoder.beginComputePass();
-    computePass.setBindGroup(0, computeBindGroup);
-    computePass.setPipeline(computePipeline);
-    // Note: x, y, z = num work groups, as in OpenGL
-    computePass.dispatch(ngroups, 1, 1);
+
+    computePass.setPipeline(scanPipeline);
+    computePass.setBindGroup(0, scanInputBindGroup);
+    console.log(`num work groups ${array.length / workGroupElements}`);
+    computePass.dispatch(array.length / workGroupElements, 1, 1);
+
+    // TODO: We need to repeat this step up process if the number of block sums exceed
+    // the number of groups * group size elements we can process at once
+    // What would be best to do here is to carry over the results from the previous chunk
+    // Then we just go in a loop processing the max # of elements we can, and applying
+    // the additional offset from the previously computed results. This is a bit
+    // easier to implement than implementing some scan tree over the blocks and doing
+    // some scans on the block chunks
+    computePass.setBindGroup(0, scanBlockBindGroup);
+    computePass.dispatch(1, 1, 1);
+    
+    computePass.setPipeline(addBlockSumsPipeline);
+    computePass.setBindGroup(0, scanInputBindGroup);
+    computePass.dispatch(array.length / workGroupElements, 1, 1);
+
     computePass.endPass();
 
-    commandEncoder.copyBufferToBuffer(dataBuf, 0, readbackBuf, 0, totalVals * 4);
+    commandEncoder.copyBufferToBuffer(dataBuf, 0, readbackBuf, 0, array.length * 4);
+    commandEncoder.copyBufferToBuffer(blockSumBuf, 0, readbackBlockSums, 0, nblockSums * 4);
 
     device.defaultQueue.submit([commandEncoder.finish()]);
 
@@ -136,9 +170,19 @@
 
     await fence.onCompletion(1);
 
-    var mapping = await readbackBuf.mapReadAsync();
-    console.log(new Float32Array(mapping));
+    var mapping = new Float32Array(await readbackBuf.mapReadAsync());
+    console.log(mapping);
+    var equivalent = serialOut.every(function(v, i) { return v == mapping[i]; });
+    if (!equivalent) {
+        console.log("compute parallel does not match serial");
+    } else {
+        console.log("Compute parallel result matches");
+    }
     readbackBuf.unmap();
+
+    var mapping = new Float32Array(await readbackBlockSums.mapReadAsync());
+    console.log("block sums:");
+    console.log(mapping);
 })();
 
 
