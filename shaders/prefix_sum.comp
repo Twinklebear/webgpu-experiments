@@ -2,18 +2,17 @@
 
 // See https://www.eecs.umich.edu/courses/eecs570/hw/parprefix.pdf
 
-#define CHUNK_SIZE 8
-layout(local_size_x = CHUNK_SIZE / 2) in;
+layout(local_size_x = BLOCK_SIZE / 2) in;
 
 layout(set = 0, binding = 0, std430) buffer Data {
-    float vals[];
+    uint vals[];
 };
 
 layout(set = 0, binding = 1, std430) buffer BlockSums {
-    float block_sums[];
+    uint block_sums[];
 };
 
-shared float chunk[CHUNK_SIZE];
+shared uint chunk[BLOCK_SIZE];
 
 void main(void) {
     chunk[2 * gl_LocalInvocationID.x] = vals[2 * gl_GlobalInvocationID.x];
@@ -21,8 +20,9 @@ void main(void) {
 
     uint offs = 1;
     // Reduce step up tree
-    for (int d = CHUNK_SIZE >> 1; d > 0; d = d >> 1) {
-        memoryBarrierShared();
+    for (int d = BLOCK_SIZE >> 1; d > 0; d = d >> 1) {
+        // Shared memory barrier doesn't quite seem to work for larger group sizes in WebGPU?
+        groupMemoryBarrier();
         if (gl_LocalInvocationID.x < d) {
             uint a = offs * (2 * gl_LocalInvocationID.x + 1) - 1;
             uint b = offs * (2 * gl_LocalInvocationID.x + 2) - 1;
@@ -32,18 +32,18 @@ void main(void) {
     }
 
     if (gl_LocalInvocationID.x == 0) {
-        block_sums[gl_WorkGroupID.x] = chunk[CHUNK_SIZE - 1];
-        chunk[CHUNK_SIZE - 1] = 0;
+        block_sums[gl_WorkGroupID.x] = chunk[BLOCK_SIZE - 1];
+        chunk[BLOCK_SIZE - 1] = 0;
     }
 
     // Sweep down the tree to finish the scan
-    for (int d = 1; d < CHUNK_SIZE; d = d << 1) {
+    for (int d = 1; d < BLOCK_SIZE; d = d << 1) {
         offs = offs >> 1;
-        memoryBarrierShared();
+        groupMemoryBarrier();
         if (gl_LocalInvocationID.x < d) {
             uint a = offs * (2 * gl_LocalInvocationID.x + 1) - 1;
             uint b = offs * (2 * gl_LocalInvocationID.x + 2) - 1;
-            const float tmp = chunk[a];
+            const uint tmp = chunk[a];
             chunk[a] = chunk[b];
             chunk[b] += tmp;
         }

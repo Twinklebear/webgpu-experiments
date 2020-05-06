@@ -16,16 +16,18 @@ try:
 except:
     pass
 
+block_size = 64
 compiled_shaders = ""
 for shader in shaders:
     print(shader)
     fname, ext = os.path.splitext(os.path.basename(shader))
     var_name ="{}_{}_spv".format(fname, ext[1:])
     print("Embedding {} as {}".format(shader, var_name))
-    args = ["python3", "compile_shader.py", glslc, shader, var_name]
+    args = ["python3", "compile_shader.py", glslc, shader, var_name, "-DBLOCK_SIZE={}".format(block_size)]
     compiled_shaders += subprocess.check_output(args).decode("utf-8")
 
 with open("embed_marching_cubes_shaders.js", "w") as f:
+    f.write("const ScanBlockSize = {};\n".format(block_size))
     f.write(compiled_shaders)
 
 
