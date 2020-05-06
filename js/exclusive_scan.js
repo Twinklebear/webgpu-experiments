@@ -3,13 +3,12 @@ var alignTo = function(val, align) {
 }
 
 // Serial scan for validation
-var serialExclusiveScan = function(array) {
-    var output = Array.from(array);
+var serialExclusiveScan = function(array, output) {
     output[0] = 0;
     for (var i = 1; i < array.length; ++i) {
         output[i] = array[i - 1] + output[i - 1];
     }
-    return output;
+    return output[array.length - 1] + array[array.length - 1];
 }
 
 var ExclusiveScanner = function(device) {

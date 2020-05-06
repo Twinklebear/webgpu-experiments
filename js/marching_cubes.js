@@ -11,8 +11,6 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var scanner = new ExclusiveScanner(device);
-
     var array = [];
     //for (var i = 0; i < scanner.maxScanSize + scanner.blockSize * 4.5; ++i) {
     //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
@@ -21,18 +19,14 @@
         array.push(Math.floor(Math.random() * 100));
         //array.push(1);
     }
+    var serialOut = Array.from(array);
     var serialStart = performance.now();
-    var serialOut = serialExclusiveScan(array);
+    var serialSum = serialExclusiveScan(array, serialOut);
     var serialEnd = performance.now();
     console.log(`Serial scan took ${serialEnd - serialStart}`);
 
-    var serialSum = 0;
-    for (var i = 0; i < array.length; ++i) {
-        serialSum = serialSum + array[i];
-    }
-
+    var scanner = new ExclusiveScanner(device);
     scanner.prepareInput(array);
-
     var parallelStart = performance.now();
     var sum = await exclusive_scan(scanner, array);
     var parallelEnd = performance.now();
