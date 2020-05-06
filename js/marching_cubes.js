@@ -18,8 +18,8 @@
     //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
     var size = 256;
     for (var i = 0; i < size * size * size; ++i) {
-        //array.push(Math.floor(Math.random() * 100));
-        array.push(1);
+        array.push(Math.floor(Math.random() * 100));
+        //array.push(1);
     }
     var serialStart = performance.now();
     var serialOut = serialExclusiveScan(array);

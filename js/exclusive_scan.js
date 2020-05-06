@@ -232,28 +232,28 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
             ]
         });
     }
+
+    var numChunks = Math.ceil(this.inputSize / (this.blockSize * this.blockSize));
+    console.log(`Must perform ${numChunks} chunk scans`);
+    this.offsets = new Uint32Array(numChunks);
+    for (var i = 0; i < numChunks; ++i) {
+        this.offsets.set([i * this.maxScanSize * 4], i);
+    }
+    console.log("Offsets:");
+    console.log(this.offsets);
 }
 
-// TODO: Array should be a device-side buffer
 async function exclusive_scan(scanner, array) {
-    var alignedSize = alignTo(array.length, scanner.blockSize); 
-    console.log(`scanning array of size ${array.length}, size aligned to block size: ${alignedSize}, total bytes ${alignedSize * 4}`);
+    console.log(`scanning array of size ${array.length}, size aligned to block size: ${scanner.inputSize}`);
 
     var startScan = performance.now();
 
+    var numChunks = Math.ceil(scanner.inputSize / (scanner.blockSize * scanner.blockSize));
     // Scan through the data in chunks, updating carry in/out at the end to carry
     // over the results of the previous chunks
-    var numChunks = Math.ceil(alignedSize / (scanner.blockSize * scanner.blockSize));
-    console.log(`Must perform ${numChunks} chunk scans`);
-    var offsets = new Uint32Array(numChunks);
-    for (var i = 0; i < numChunks; ++i) {
-        offsets.set([i * scanner.maxScanSize * 4], i);
-    }
-    console.log("Offsets:");
-    console.log(offsets);
     var commandEncoder = scanner.device.createCommandEncoder();
     for (var i = 0; i < numChunks; ++i) {
-        var nWorkGroups = Math.min((alignedSize - i * scanner.maxScanSize) / scanner.blockSize, scanner.blockSize);
+        var nWorkGroups = Math.min((scanner.inputSize - i * scanner.maxScanSize) / scanner.blockSize, scanner.blockSize);
 
         var scanBlockBG = scanner.scanBlocksBindGroup;
         var addBlockSumsBG = scanner.addBlockSumsBindGroup;
@@ -265,7 +265,7 @@ async function exclusive_scan(scanner, array) {
         var computePass = commandEncoder.beginComputePass();
 
         computePass.setPipeline(scanner.scanBlocksPipeline);
-        computePass.setBindGroup(0, scanBlockBG, offsets, i, 1);
+        computePass.setBindGroup(0, scanBlockBG, scanner.offsets, i, 1);
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.setPipeline(scanner.scanBlockResultsPipeline);
@@ -273,7 +273,7 @@ async function exclusive_scan(scanner, array) {
         computePass.dispatch(1, 1, 1);
 
         computePass.setPipeline(scanner.addBlockSumsPipeline);
-        computePass.setBindGroup(0, addBlockSumsBG, offsets, i, 1);
+        computePass.setBindGroup(0, addBlockSumsBG, scanner.offsets, i, 1);
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.endPass();
@@ -284,6 +284,7 @@ async function exclusive_scan(scanner, array) {
     // Readback the the last element to return the total sum as well
     commandEncoder.copyBufferToBuffer(scanner.inputBuf, (array.length - 1) * 4, scanner.readbackBuf, 0, 4);
     scanner.device.defaultQueue.submit([commandEncoder.finish()]);
+    var endSubmit = performance.now();
 
     scanner.device.defaultQueue.signal(scanner.fence, 1);
     await scanner.fence.onCompletion(1);
@@ -291,6 +292,7 @@ async function exclusive_scan(scanner, array) {
     var endScan = performance.now();
 
     console.log(`Parallel scan took ${endScan - startScan}`);
+    console.log(`Command build & submit took ${endSubmit - startScan}`);
 
     // Save the last element in the array so we can also return the total sum
     // This is also stored in the final carry out
