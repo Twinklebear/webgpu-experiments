@@ -261,6 +261,7 @@ async function exclusive_scan(scanner, array) {
         computePass.setBindGroup(0, scanBlocksBindGroup);
         computePass.dispatch(nWorkGroups, 1, 1);
 
+        // TODO: Is it a race condition between these passes on the data buffers? Or is there an implicit memory barrier?
         computePass.setPipeline(scanner.scanBlockResultsPipeline);
         computePass.setBindGroup(0, scanBlockResultsBindGroup);
         computePass.dispatch(1, 1, 1);
