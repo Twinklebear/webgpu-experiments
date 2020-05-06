@@ -14,9 +14,10 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    for (var i = 0; i < scanner.maxScanSize + scanner.blockSize * 4.5; ++i) {
+    //for (var i = 0; i < scanner.maxScanSize + scanner.blockSize * 4.5; ++i) {
     //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
-    //for (var i = 0; i < 256 * 256 * 256; ++i) {
+    var size = 256;
+    for (var i = 0; i < size * size * size; ++i) {
         //array.push(Math.floor(Math.random() * 100));
         array.push(1);
     }
@@ -30,16 +31,12 @@
         serialSum = serialSum + array[i];
     }
 
-    // Upload input and pad to block size elements
-    var [inputBuf, mapping] = scanner.device.createBufferMapped({
-        size: scanner.getAlignedSize(array.length) * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-    });
-    new Uint32Array(mapping).set(array);
-    inputBuf.unmap();
+    scanner.prepareInput(array);
 
-    var sum = await exclusive_scan(scanner, array, inputBuf);
-    console.log(`parallel sum ${sum}`);
+    var parallelStart = performance.now();
+    var sum = await exclusive_scan(scanner, array);
+    var parallelEnd = performance.now();
+    console.log(`parallel sum ${sum}, total caller time ${parallelEnd - parallelStart}`);
 
     // Readback the result. Not timed since the future Marching Cubes method will
     // keep this data on the GPU. So this should in the future take a GPU buffer
@@ -49,7 +46,7 @@
     });
 
     var commandEncoder = device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(inputBuf, 0, readbackBuf, 0, array.length * 4);
+    commandEncoder.copyBufferToBuffer(scanner.inputBuf, 0, readbackBuf, 0, array.length * 4);
     device.defaultQueue.submit([commandEncoder.finish()]);
 
     // Note: no fences on FF nightly at the moment

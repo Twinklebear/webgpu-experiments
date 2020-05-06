@@ -21,6 +21,8 @@ var ExclusiveScanner = function(device) {
     this.maxScanSize = this.blockSize * this.blockSize;
     console.log(`Block size: ${this.blockSize}, max scan size: ${this.maxScanSize}`);
 
+    this.fence = device.defaultQueue.createFence();
+
     this.scanBlocksLayout = device.createBindGroupLayout({
         entries: [
             {
@@ -91,42 +93,50 @@ var ExclusiveScanner = function(device) {
             entryPoint: "main"
         }
     });
+
+    this.readbackBuf = device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
 }
 
-ExclusiveScanner.prototype.getAlignedSize = function(size) {
-    return alignTo(size, this.blockSize)
-}
+ExclusiveScanner.prototype.prepareInput = function(array) {
+    this.inputSize = alignTo(array.length, this.blockSize)
 
-// TODO: Array should be a device-side buffer
-async function exclusive_scan(scanner, array, gpuArray) {
-    var alignedSize = alignTo(array.length, scanner.blockSize); 
-    console.log(`scanning array of size ${array.length}, size aligned to block size: ${alignedSize}, total bytes ${alignedSize * 4}`);
+    // Upload input and pad to block size elements
+    var [inputBuf, mapping] = this.device.createBufferMapped({
+        size: this.inputSize * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    new Uint32Array(mapping).set(array);
+    inputBuf.unmap();
+    this.inputBuf = inputBuf;
 
-    // Block sum buffer, padded up to block size elements
-    var nBlockSums = scanner.blockSize;
-    console.log(`num block sums ${nBlockSums}`);
-    var [blockSumBuf, mapping] = scanner.device.createBufferMapped({
-        size: nBlockSums * 4,
+    // Block sum buffer
+    var [blockSumBuf, mapping] = this.device.createBufferMapped({
+        size: this.blockSize * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     });
     new Uint32Array(mapping).fill(0);
     blockSumBuf.unmap();
+    this.blockSumBuf = blockSumBuf;
 
-    var [carryBuf, mapping] = scanner.device.createBufferMapped({
+    var [carryBuf, mapping] = this.device.createBufferMapped({
         size: 8,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
     new Uint32Array(mapping).fill(0);
     carryBuf.unmap();
+    this.carryBuf = carryBuf;
 
-    var scanBlocksBindGroup = scanner.device.createBindGroup({
-        layout: scanner.scanBlocksLayout,
+    this.scanBlocksBindGroup = this.device.createBindGroup({
+        layout: this.scanBlocksLayout,
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: gpuArray,
-                    size: Math.min(scanner.maxScanSize * 4, alignedSize),
+                    buffer: inputBuf,
+                    size: Math.min(this.maxScanSize * 4, this.inputSize),
                     offset: 0,
                 }
             },
@@ -139,8 +149,8 @@ async function exclusive_scan(scanner, array, gpuArray) {
         ]
     });
 
-    var scanBlockResultsBindGroup = scanner.device.createBindGroup({
-        layout: scanner.scanBlockResultsLayout,
+    this.scanBlockResultsBindGroup = this.device.createBindGroup({
+        layout: this.scanBlockResultsLayout,
         entries: [
             {
                 binding: 0,
@@ -157,14 +167,14 @@ async function exclusive_scan(scanner, array, gpuArray) {
         ]
     });
 
-    var addBlockSumsBindGroup = scanner.device.createBindGroup({
-        layout: scanner.addBlockSumsLayout,
+    this.addBlockSumsBindGroup = this.device.createBindGroup({
+        layout: this.addBlockSumsLayout,
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: gpuArray,
-                    size: Math.min(scanner.maxScanSize * 4, alignedSize),
+                    buffer: inputBuf,
+                    size: Math.min(this.maxScanSize * 4, this.inputSize),
                     offset: 0,
                 }
             },
@@ -179,55 +189,55 @@ async function exclusive_scan(scanner, array, gpuArray) {
 
     // Bind groups for processing the remainder if the aligned size isn't
     // an even multiple of the max scan size
-    console.log(`remainder elements ${alignedSize % scanner.maxScanSize}`);
-    var remainderScanBlocksBindGroup = scanner.device.createBindGroup({
-        layout: scanner.scanBlocksLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: gpuArray,
-                    size: (alignedSize % scanner.maxScanSize) * 4,
-                    offset: 0,
+    console.log(`remainder elements ${this.inputSize % this.maxScanSize}`);
+    this.remainderScanBlocksBindGroup = null;
+    this.remainderAddBlockSumsBindGroup = null;
+    if (this.inputSize % this.maxScanSize) {
+        this.remainderScanBlocksBindGroup = this.device.createBindGroup({
+            layout: this.scanBlocksLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: inputBuf,
+                        size: (this.inputSize % this.maxScanSize) * 4,
+                        offset: 0,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: blockSumBuf
+                    }
                 }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: blockSumBuf
+            ]
+        });
+        this.remainderAddBlockSumsBindGroup = this.device.createBindGroup({
+            layout: this.addBlockSumsLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: inputBuf,
+                        size: (this.inputSize % this.maxScanSize) * 4,
+                        offset: 0,
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: blockSumBuf
+                    }
                 }
-            }
-        ]
-    });
-    var remainderAddBlockSumsBindGroup = scanner.device.createBindGroup({
-        layout: scanner.addBlockSumsLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: gpuArray,
-                    size: (alignedSize % scanner.maxScanSize) * 4,
-                    offset: 0,
-                }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: blockSumBuf
-                }
-            }
-        ]
-    });
+            ]
+        });
+    }
+}
 
-    var debugReadback = scanner.device.createBuffer({
-        size: 8,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-    });
-
-    var readBlockSumBuf = scanner.device.createBuffer({
-        size: nBlockSums * 4,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-    });
+// TODO: Array should be a device-side buffer
+async function exclusive_scan(scanner, array) {
+    var alignedSize = alignTo(array.length, scanner.blockSize); 
+    console.log(`scanning array of size ${array.length}, size aligned to block size: ${alignedSize}, total bytes ${alignedSize * 4}`);
 
     var startScan = performance.now();
 
@@ -241,17 +251,17 @@ async function exclusive_scan(scanner, array, gpuArray) {
     }
     console.log("Offsets:");
     console.log(offsets);
+    var commandEncoder = scanner.device.createCommandEncoder();
     for (var i = 0; i < numChunks; ++i) {
         var nWorkGroups = Math.min((alignedSize - i * scanner.maxScanSize) / scanner.blockSize, scanner.blockSize);
 
-        var scanBlockBG = scanBlocksBindGroup;
-        var addBlockSumsBG = addBlockSumsBindGroup;
+        var scanBlockBG = scanner.scanBlocksBindGroup;
+        var addBlockSumsBG = scanner.addBlockSumsBindGroup;
         if (nWorkGroups < scanner.maxScanSize / scanner.blockSize) {
-            scanBlockBG = remainderScanBlocksBindGroup;
-            addBlockSumsBG = remainderAddBlockSumsBindGroup;
+            scanBlockBG = scanner.remainderScanBlocksBindGroup;
+            addBlockSumsBG = scanner.remainderAddBlockSumsBindGroup;
         }
 
-        var commandEncoder = scanner.device.createCommandEncoder();
         var computePass = commandEncoder.beginComputePass();
 
         computePass.setPipeline(scanner.scanBlocksPipeline);
@@ -259,7 +269,7 @@ async function exclusive_scan(scanner, array, gpuArray) {
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.setPipeline(scanner.scanBlockResultsPipeline);
-        computePass.setBindGroup(0, scanBlockResultsBindGroup);
+        computePass.setBindGroup(0, scanner.scanBlockResultsBindGroup);
         computePass.dispatch(1, 1, 1);
 
         computePass.setPipeline(scanner.addBlockSumsPipeline);
@@ -269,36 +279,28 @@ async function exclusive_scan(scanner, array, gpuArray) {
         computePass.endPass();
 
         // Update the carry in value for the next chunk, copy carry out to carry in
-        commandEncoder.copyBufferToBuffer(carryBuf, 4, carryBuf, 0, 4);
-
-        scanner.device.defaultQueue.submit([commandEncoder.finish()]);
+        commandEncoder.copyBufferToBuffer(scanner.carryBuf, 4, scanner.carryBuf, 0, 4);
     }
-    var endScan = performance.now();
-    console.log(`Parallel scan took ${endScan - startScan}`);
-
     // Readback the the last element to return the total sum as well
-    var readbackBuf = scanner.device.createBuffer({
-        size: 4,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-    });
-
-    var commandEncoder = scanner.device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(gpuArray, (array.length - 1) * 4, readbackBuf, 0, 4);
+    commandEncoder.copyBufferToBuffer(scanner.inputBuf, (array.length - 1) * 4, scanner.readbackBuf, 0, 4);
     scanner.device.defaultQueue.submit([commandEncoder.finish()]);
 
-    var fence = scanner.device.defaultQueue.createFence();
-    scanner.device.defaultQueue.signal(fence, 1);
-    await fence.onCompletion(1);
+    scanner.device.defaultQueue.signal(scanner.fence, 1);
+    await scanner.fence.onCompletion(1);
+
+    var endScan = performance.now();
+
+    console.log(`Parallel scan took ${endScan - startScan}`);
 
     // Save the last element in the array so we can also return the total sum
     // This is also stored in the final carry out
     var lastElem = array[array.length - 1];
 
     // Readback the result and write it to the input array
-    var mapping = new Uint32Array(await readbackBuf.mapReadAsync());
+    var mapping = new Uint32Array(await scanner.readbackBuf.mapReadAsync());
     console.log(mapping);
     var sum = mapping[0] + array[array.length - 1];
-    readbackBuf.unmap();
+    scanner.readbackBuf.unmap();
 
     return sum;
 }
