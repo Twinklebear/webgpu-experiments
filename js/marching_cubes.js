@@ -14,8 +14,10 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
-        //array.push(Math.floor(Math.random() * 100 - 50));
+    for (var i = 0; i < scanner.maxScanSize + scanner.blockSize * 4.5; ++i) {
+    //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
+    //for (var i = 0; i < 256 * 256 * 256; ++i) {
+        //array.push(Math.floor(Math.random() * 100));
         array.push(1);
     }
     var serialStart = performance.now();
@@ -28,8 +30,40 @@
         serialSum = serialSum + array[i];
     }
 
-    var sum = await exclusive_scan(scanner, array);
+    // Upload input and pad to block size elements
+    var [inputBuf, mapping] = scanner.device.createBufferMapped({
+        size: scanner.getAlignedSize(array.length) * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    new Uint32Array(mapping).set(array);
+    inputBuf.unmap();
+
+    var sum = await exclusive_scan(scanner, array, inputBuf);
     console.log(`parallel sum ${sum}`);
+
+    // Readback the result. Not timed since the future Marching Cubes method will
+    // keep this data on the GPU. So this should in the future take a GPU buffer
+    var readbackBuf = scanner.device.createBuffer({
+        size: array.length * 4,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+
+    var commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(inputBuf, 0, readbackBuf, 0, array.length * 4);
+    device.defaultQueue.submit([commandEncoder.finish()]);
+
+    // Note: no fences on FF nightly at the moment
+    //await new Promise(r => setTimeout(r, 2000));
+    var fence = device.defaultQueue.createFence();
+    device.defaultQueue.signal(fence, 1);
+    await fence.onCompletion(1);
+
+    var mapping = new Uint32Array(await readbackBuf.mapReadAsync());
+    console.log(mapping);
+    for (var i = 0; i < array.length; ++i) {
+        array[i] = mapping[i];
+    }
+
     console.log(array);
 
     if (serialSum != sum) {
