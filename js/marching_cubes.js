@@ -14,7 +14,7 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    for (var i = 0; i < scanner.maxScanSize * 4; ++i) {
+    for (var i = 0; i < scanner.maxScanSize * 2; ++i) {
         //array.push(Math.floor(Math.random() * 100 - 50));
         array.push(1);
     }
@@ -41,7 +41,8 @@
         console.log("Parallel result does not match serial");
         for (var i = 0; i < array.length; ++i) {
             if (Math.abs(array[i] - serialOut[i]) > 0.01) {
-                //console.log(`Differing elements at ${i}: parallel got ${array[i]}, expected ${serialOut[i]}`);
+                console.log(`First differing elements at ${i}: parallel got ${array[i]}, expected ${serialOut[i]}`);
+                break;
             }
         }
         console.log("parallel result");

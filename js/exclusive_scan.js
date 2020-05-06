@@ -20,6 +20,7 @@ var ExclusiveScanner = function(device) {
     // The max size which can be scanned by a single batch without carry in/out
     this.maxScanSize = this.blockSize * this.blockSize;
     console.log(`Block size: ${this.blockSize}, max scan size: ${this.maxScanSize}`);
+    console.log(`Serial kernels? ${SerialKernels}`);
 
     this.scanBlocksLayout = device.createBindGroupLayout({
         entries: [
@@ -198,13 +199,13 @@ async function exclusive_scan(scanner, array) {
     console.log(`Must perform ${numChunks} chunk scans`);
     for (var i = 0; i < numChunks; ++i) {
         console.log(`Scanning chunk ${i}, at offset ${i * scanner.maxScanSize}`);
-        console.log(`max scan size ${scanner.maxScanSize}`);
+        //console.log(`max scan size ${scanner.maxScanSize}`);
         // Write the number of workgroups, since we need to send this ourselves right now
         // It's only needed in the final pass adding the block sums to know which thread
         // should write the carry out value so we just write the # of work groups for the
         // block scan
         var nWorkGroups = Math.min((alignedSize - i * scanner.maxScanSize) / scanner.blockSize, scanner.blockSize);
-        console.log(`# of work groups ${nWorkGroups}`);
+        //console.log(`# of work groups ${nWorkGroups}`);
         var [upload, uploadMap] = scanner.device.createBufferMapped({
             size: 16,
             usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC
@@ -257,11 +258,13 @@ async function exclusive_scan(scanner, array) {
         computePass.setPipeline(scanner.scanBlocksPipeline);
         // Is dynamic offset bytes or elemetns? Why do i get alignment errors if it's a count in elements??
         // Or out of range if setting it as a byte value? (implying it's a count in elements?)
-        console.log(`Dynamic offset ${i * scanner.maxScanSize * 4}`);
+        //console.log(`Dynamic offset ${i * scanner.maxScanSize * 4}`);
+        // It seems like the bug is really within the compute shader execution, not an ordering
+        // issue here, since running with only scanBlocks at block size > 64 yields incorrect results
+        // with parallel kernels
         computePass.setBindGroup(0, scanBlocksBindGroup);
         computePass.dispatch(nWorkGroups, 1, 1);
 
-        // TODO: Is it a race condition between these passes on the data buffers? Or is there an implicit memory barrier?
         computePass.setPipeline(scanner.scanBlockResultsPipeline);
         computePass.setBindGroup(0, scanBlockResultsBindGroup);
         computePass.dispatch(1, 1, 1);
@@ -274,13 +277,14 @@ async function exclusive_scan(scanner, array) {
 
         // Update the carry in value for the next chunk, copy carry out to carry in
         commandEncoder.copyBufferToBuffer(carryBuf, 4, carryBuf, 0, 4);
-        commandEncoder.copyBufferToBuffer(carryBuf, 0, debugReadback, 0, 8);
 
-        commandEncoder.copyBufferToBuffer(blockSumBuf, 0, readBlockSumBuf, 0, nBlockSums * 4);
+        //commandEncoder.copyBufferToBuffer(carryBuf, 0, debugReadback, 0, 8);
+        //commandEncoder.copyBufferToBuffer(blockSumBuf, 0, readBlockSumBuf, 0, nBlockSums * 4);
         //commandEncoder.copyBufferToBuffer(carryInOutBuf, 0, readbackCarry, 0, 8);
 
         scanner.device.defaultQueue.submit([commandEncoder.finish()]);
 
+        /*
         var fence = scanner.device.defaultQueue.createFence();
         scanner.device.defaultQueue.signal(fence, 1);
         await fence.onCompletion(1);
@@ -296,6 +300,7 @@ async function exclusive_scan(scanner, array) {
         var mapping = new Uint32Array(await readBlockSumBuf.mapReadAsync());
         console.log(mapping.slice(0, alignedSize / scanner.blockSize));
         readBlockSumBuf.unmap();
+        */
     }
 
     // Readback the result
