@@ -61,7 +61,8 @@ void main(void) {
     uint offs = 1;
     // Reduce step up tree
     for (int d = BLOCK_SIZE >> 1; d > 0; d = d >> 1) {
-        // Shared memory barrier doesn't quite seem to work for larger group sizes in WebGPU?
+        // TODO: Having memory barriers work (i.e., work groups > warp size) requires the
+        // WebGPU subgroup support extension
         memoryBarrierShared();
         if (gl_LocalInvocationID.x < d) {
             uint a = offs * (2 * gl_LocalInvocationID.x + 1) - 1;

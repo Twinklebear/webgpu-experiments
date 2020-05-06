@@ -19,7 +19,7 @@ except:
 serial_kernels = False
 block_size = 64
 if block_size > 64:
-    print("Warning: Are WebGPU memory barriers implemented yet? Groups > {} will lead to errors without".format(block_size))
+    print("Warning: Work groups > warp size ({}) requires WebGPU subgroup extension. Is this implemented?".format(block_size / 2))
 
 compiled_shaders = ""
 for shader in shaders:
