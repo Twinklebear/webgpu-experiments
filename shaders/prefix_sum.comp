@@ -21,9 +21,7 @@ void main(void) {
     uint offs = 1;
     // Reduce step up tree
     for (int d = BLOCK_SIZE >> 1; d > 0; d = d >> 1) {
-        // TODO: Having memory barriers work (i.e., work groups > warp size) requires the
-        // WebGPU subgroup support extension
-        memoryBarrierShared();
+        barrier();
         if (gl_LocalInvocationID.x < d) {
             uint a = offs * (2 * gl_LocalInvocationID.x + 1) - 1;
             uint b = offs * (2 * gl_LocalInvocationID.x + 2) - 1;
@@ -40,7 +38,7 @@ void main(void) {
     // Sweep down the tree to finish the scan
     for (int d = 1; d < BLOCK_SIZE; d = d << 1) {
         offs = offs >> 1;
-        memoryBarrierShared();
+        barrier();
         if (gl_LocalInvocationID.x < d) {
             uint a = offs * (2 * gl_LocalInvocationID.x + 1) - 1;
             uint b = offs * (2 * gl_LocalInvocationID.x + 2) - 1;
@@ -50,7 +48,7 @@ void main(void) {
         }
     }
 
-    memoryBarrierShared();
+    barrier();
     vals[2 * gl_GlobalInvocationID.x] = chunk[2 * gl_LocalInvocationID.x];
     vals[2 * gl_GlobalInvocationID.x + 1] = chunk[2 * gl_LocalInvocationID.x + 1];
 }

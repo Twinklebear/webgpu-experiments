@@ -16,9 +16,7 @@ try:
 except:
     pass
 
-block_size = 128
-if block_size > 64:
-    print("Warning: Work groups > warp size ({}) requires WebGPU subgroup extension. Is this implemented?".format(block_size / 2))
+block_size = 512
 
 compiled_shaders = ""
 for shader in shaders:
