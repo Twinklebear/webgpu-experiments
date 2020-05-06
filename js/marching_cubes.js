@@ -11,26 +11,51 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
+    var scanner = new ExclusiveScanner(device);
+
     var array = [];
-    //for (var i = 0; i < scanner.maxScanSize + scanner.blockSize * 4.5; ++i) {
-    //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
-    var size = 256;
+    var size = 128;
     for (var i = 0; i < size * size * size; ++i) {
         array.push(Math.floor(Math.random() * 100));
         //array.push(1);
     }
-    var serialOut = Array.from(array);
-    var serialStart = performance.now();
-    var serialSum = serialExclusiveScan(array, serialOut);
-    var serialEnd = performance.now();
-    console.log(`Serial scan took ${serialEnd - serialStart}`);
 
-    var scanner = new ExclusiveScanner(device);
+    var serialOut = Array.from(array);
+    var totalSerialTime = 0;
+    var numIterations = 100;
+    for (var i = 0; i < numIterations; ++i) {
+        var serialStart = performance.now();
+        var serialSum = serialExclusiveScan(array, serialOut);
+        var serialEnd = performance.now();
+        totalSerialTime += serialEnd - serialStart;
+    }
+    console.log(`Avg. serial time ${totalSerialTime / numIterations}`);
+
     scanner.prepareInput(array);
-    var parallelStart = performance.now();
+
+    var [uploadBuf, mapping] = device.createBufferMapped({
+        size: array.length * 4,
+        usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.MAP_WRITE
+    });
+    new Uint32Array(mapping).set(array);
+    uploadBuf.unmap();
+
+    var commandEncoder = device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(uploadBuf, 0, scanner.inputBuf, 0, array.length * 4);
+    var setInputCommandBuf = commandEncoder.finish();
+    // Run a warm up scan to build the pipeline and setup
     var sum = await exclusive_scan(scanner, array);
-    var parallelEnd = performance.now();
-    console.log(`parallel sum ${sum}, total caller time ${parallelEnd - parallelStart}`);
+
+    var totalParallelTime = 0;
+    for (var i = 0; i < numIterations; ++i) {
+        device.defaultQueue.submit([setInputCommandBuf]);
+
+        var parallelStart = performance.now();
+        var sum = await exclusive_scan(scanner, array);
+        var parallelEnd = performance.now();
+        totalParallelTime += parallelEnd - parallelStart;
+    }
+    console.log(`Avg. parallel time ${totalParallelTime / numIterations}`);
 
     // Readback the result. Not timed since the future Marching Cubes method will
     // keep this data on the GPU. So this should in the future take a GPU buffer
@@ -50,7 +75,6 @@
     await fence.onCompletion(1);
 
     var mapping = new Uint32Array(await readbackBuf.mapReadAsync());
-    console.log(mapping);
     for (var i = 0; i < array.length; ++i) {
         array[i] = mapping[i];
     }

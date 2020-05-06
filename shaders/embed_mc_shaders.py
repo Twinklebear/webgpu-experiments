@@ -16,7 +16,7 @@ try:
 except:
     pass
 
-block_size = 256
+block_size = 512
 
 compiled_shaders = ""
 for shader in shaders:
