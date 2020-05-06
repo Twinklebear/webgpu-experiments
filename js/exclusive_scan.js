@@ -131,7 +131,7 @@ async function exclusive_scan(scanner, array) {
                 binding: 0,
                 resource: {
                     buffer: inputBuf,
-                    size: scanner.maxScanSize * 4,
+                    size: Math.min(scanner.maxScanSize * 4, alignedSize),
                     offset: 0,
                 }
             },
@@ -169,7 +169,7 @@ async function exclusive_scan(scanner, array) {
                 binding: 0,
                 resource: {
                     buffer: inputBuf,
-                    size: scanner.maxScanSize * 4,
+                    size: Math.min(scanner.maxScanSize * 4, alignedSize),
                     offset: 0,
                 }
             },
@@ -196,7 +196,7 @@ async function exclusive_scan(scanner, array) {
 
     // Scan through the data in chunks, updating carry in/out at the end to carry
     // over the results of the previous chunks
-    var numChunks = alignedSize / (scanner.blockSize * scanner.blockSize);
+    var numChunks = Math.ceil(alignedSize / (scanner.blockSize * scanner.blockSize));
     console.log(`Must perform ${numChunks} chunk scans`);
     var offsets = new Uint32Array(numChunks);
     for (var i = 0; i < numChunks; ++i) {

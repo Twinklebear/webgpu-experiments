@@ -16,7 +16,7 @@ try:
 except:
     pass
 
-block_size = 64
+block_size = 128
 if block_size > 64:
     print("Warning: Work groups > warp size ({}) requires WebGPU subgroup extension. Is this implemented?".format(block_size / 2))
 

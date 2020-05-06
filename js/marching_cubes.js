@@ -14,7 +14,8 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
+    //for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
+    for (var i = 0; i < scanner.blockSize; ++i) {
         //array.push(Math.floor(Math.random() * 100 - 50));
         array.push(1);
     }
