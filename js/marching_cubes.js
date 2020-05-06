@@ -6,7 +6,7 @@
     var context = canvas.getContext("gpupresent");
     var swapChainFormat = "bgra8unorm";
     var swapChain = context.configureSwapChain({
-        device,
+        device: device,
         format: swapChainFormat,
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
@@ -14,11 +14,12 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    var size = 128;
+    var size = 256;
     for (var i = 0; i < size * size * size; ++i) {
         array.push(Math.floor(Math.random() * 100));
         //array.push(1);
     }
+    console.log(`Scanning ${array.length} elements`);
 
     var serialOut = Array.from(array);
     var totalSerialTime = 0;
@@ -44,7 +45,10 @@
     commandEncoder.copyBufferToBuffer(uploadBuf, 0, scanner.inputBuf, 0, array.length * 4);
     var setInputCommandBuf = commandEncoder.finish();
     // Run a warm up scan to build the pipeline and setup
+    var firstParallelStart = performance.now();
     var sum = await exclusive_scan(scanner, array);
+    var firstParallelEnd = performance.now();
+    console.log(`First parallel launch ${firstParallelEnd - firstParallelStart}`);
 
     var totalParallelTime = 0;
     for (var i = 0; i < numIterations; ++i) {

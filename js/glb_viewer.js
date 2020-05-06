@@ -177,7 +177,7 @@
     var context = canvas.getContext("gpupresent");
     var swapChainFormat = "bgra8unorm";
     var swapChain = context.configureSwapChain({
-        device,
+        device: device,
         format: swapChainFormat,
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
