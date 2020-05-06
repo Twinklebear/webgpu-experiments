@@ -11,6 +11,17 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
+    /*
+    var volumeData = await fetch(makeVolumeURL("Fuel"))
+        .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
+    console.log(volumeData);
+    var maxVal = 0;
+    for (var i = 0; i < volumeData.length; ++i) {
+        maxVal = Math.max(maxVal, volumeData[i]);
+    }
+    console.log(`Max val ${maxVal}`);
+    */
+
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
@@ -23,7 +34,7 @@
 
     var serialOut = Array.from(array);
     var totalSerialTime = 0;
-    var numIterations = 100;
+    var numIterations = 1;
     for (var i = 0; i < numIterations; ++i) {
         var serialStart = performance.now();
         var serialSum = serialExclusiveScan(array, serialOut);
