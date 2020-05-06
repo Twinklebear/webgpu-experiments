@@ -20,7 +20,6 @@ var ExclusiveScanner = function(device) {
     // The max size which can be scanned by a single batch without carry in/out
     this.maxScanSize = this.blockSize * this.blockSize;
     console.log(`Block size: ${this.blockSize}, max scan size: ${this.maxScanSize}`);
-    console.log(`Serial kernels? ${SerialKernels}`);
 
     this.scanBlocksLayout = device.createBindGroupLayout({
         entries: [
