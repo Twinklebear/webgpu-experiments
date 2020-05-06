@@ -27,7 +27,7 @@ var ExclusiveScanner = function(device) {
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer",
-                //hasDynamicOffset: true,
+                hasDynamicOffset: true,
             },
             {
                 binding: 1,
@@ -58,7 +58,7 @@ var ExclusiveScanner = function(device) {
                 binding: 0,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer",
-                //hasDynamicOffset: true,
+                hasDynamicOffset: true,
             },
             {
                 binding: 1,
@@ -93,6 +93,7 @@ var ExclusiveScanner = function(device) {
     });
 }
 
+// TODO: Array should be a device-side buffer
 async function exclusive_scan(scanner, array) {
     var alignedSize = alignTo(array.length, scanner.blockSize); 
     console.log(`scanning array of size ${array.length}, size aligned to block size: ${alignedSize}, total bytes ${alignedSize * 4}`);
@@ -123,14 +124,15 @@ async function exclusive_scan(scanner, array) {
     new Uint32Array(mapping).fill(0);
     carryBuf.unmap();
 
-    /*
     var scanBlocksBindGroup = scanner.device.createBindGroup({
         layout: scanner.scanBlocksLayout,
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: inputBuf
+                    buffer: inputBuf,
+                    size: scanner.maxScanSize * 4,
+                    offset: 0,
                 }
             },
             {
@@ -141,7 +143,6 @@ async function exclusive_scan(scanner, array) {
             }
         ]
     });
-    */
 
     var scanBlockResultsBindGroup = scanner.device.createBindGroup({
         layout: scanner.scanBlockResultsLayout,
@@ -161,14 +162,15 @@ async function exclusive_scan(scanner, array) {
         ]
     });
 
-    /*
     var addBlockSumsBindGroup = scanner.device.createBindGroup({
         layout: scanner.addBlockSumsLayout,
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: inputBuf
+                    buffer: inputBuf,
+                    size: scanner.maxScanSize * 4,
+                    offset: 0,
                 }
             },
             {
@@ -179,7 +181,6 @@ async function exclusive_scan(scanner, array) {
             }
         ]
     });
-    */
 
     var debugReadback = scanner.device.createBuffer({
         size: 8,
@@ -191,77 +192,26 @@ async function exclusive_scan(scanner, array) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
+    var startScan = performance.now();
+
     // Scan through the data in chunks, updating carry in/out at the end to carry
     // over the results of the previous chunks
-    // TODO: Can these all be encoded together as a group? Would there be sync issues?
     var numChunks = alignedSize / (scanner.blockSize * scanner.blockSize);
     console.log(`Must perform ${numChunks} chunk scans`);
+    var offsets = new Uint32Array(numChunks);
     for (var i = 0; i < numChunks; ++i) {
-        console.log(`Scanning chunk ${i}, at offset ${i * scanner.maxScanSize}`);
-        //console.log(`max scan size ${scanner.maxScanSize}`);
-        // Write the number of workgroups, since we need to send this ourselves right now
-        // It's only needed in the final pass adding the block sums to know which thread
-        // should write the carry out value so we just write the # of work groups for the
-        // block scan
+        offsets.set([i * scanner.maxScanSize * 4], i);
+    }
+    console.log("Offsets:");
+    console.log(offsets);
+    for (var i = 0; i < numChunks; ++i) {
         var nWorkGroups = Math.min((alignedSize - i * scanner.maxScanSize) / scanner.blockSize, scanner.blockSize);
-        //console.log(`# of work groups ${nWorkGroups}`);
-        var [upload, uploadMap] = scanner.device.createBufferMapped({
-            size: 16,
-            usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC
-        });
-        new Uint32Array(uploadMap).set([nWorkGroups, 1, 1, 1]);
-        upload.unmap();
-
-        var scanBlocksBindGroup = scanner.device.createBindGroup({
-            layout: scanner.scanBlocksLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: inputBuf,
-                        offset: i * scanner.maxScanSize * 4,
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: blockSumBuf
-                    }
-                }
-            ]
-        });
-
-        var addBlockSumsBindGroup = scanner.device.createBindGroup({
-            layout: scanner.addBlockSumsLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: inputBuf,
-                        offset: i * scanner.maxScanSize * 4,
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: blockSumBuf
-                    }
-                }
-            ]
-        });
 
         var commandEncoder = scanner.device.createCommandEncoder();
-
         var computePass = commandEncoder.beginComputePass();
 
         computePass.setPipeline(scanner.scanBlocksPipeline);
-        // Is dynamic offset bytes or elemetns? Why do i get alignment errors if it's a count in elements??
-        // Or out of range if setting it as a byte value? (implying it's a count in elements?)
-        //console.log(`Dynamic offset ${i * scanner.maxScanSize * 4}`);
-        // It seems like the bug is really within the compute shader execution, not an ordering
-        // issue here, since running with only scanBlocks at block size > 64 yields incorrect results
-        // with parallel kernels
-        computePass.setBindGroup(0, scanBlocksBindGroup);
+        computePass.setBindGroup(0, scanBlocksBindGroup, offsets, i, 1);
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.setPipeline(scanner.scanBlockResultsPipeline);
@@ -269,7 +219,7 @@ async function exclusive_scan(scanner, array) {
         computePass.dispatch(1, 1, 1);
 
         computePass.setPipeline(scanner.addBlockSumsPipeline);
-        computePass.setBindGroup(0, addBlockSumsBindGroup);
+        computePass.setBindGroup(0, addBlockSumsBindGroup, offsets, i, 1);
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.endPass();
@@ -301,8 +251,11 @@ async function exclusive_scan(scanner, array) {
         readBlockSumBuf.unmap();
         */
     }
+    var endScan = performance.now();
+    console.log(`Parallel scan took ${endScan - startScan}`);
 
-    // Readback the result
+    // Readback the result. Not timed since the future Marching Cubes method will
+    // keep this data on the GPU. So this should in the future take a GPU buffer
     var readbackBuf = scanner.device.createBuffer({
         size: array.length * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,

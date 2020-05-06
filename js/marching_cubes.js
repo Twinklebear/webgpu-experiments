@@ -14,15 +14,18 @@
     var scanner = new ExclusiveScanner(device);
 
     var array = [];
-    for (var i = 0; i < scanner.maxScanSize * 2; ++i) {
+    for (var i = 0; i < scanner.maxScanSize * 8; ++i) {
         //array.push(Math.floor(Math.random() * 100 - 50));
         array.push(1);
     }
+    var serialStart = performance.now();
     var serialOut = serialExclusiveScan(array);
+    var serialEnd = performance.now();
+    console.log(`Serial scan took ${serialEnd - serialStart}`);
 
     var serialSum = 0;
     for (var i = 0; i < array.length; ++i) {
-        serialSum = Math.fround(serialSum + array[i]);
+        serialSum = serialSum + array[i];
     }
 
     var sum = await exclusive_scan(scanner, array);
