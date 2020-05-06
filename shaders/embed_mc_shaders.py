@@ -24,7 +24,8 @@ for shader in shaders:
     fname, ext = os.path.splitext(os.path.basename(shader))
     var_name ="{}_{}_spv".format(fname, ext[1:])
     print("Embedding {} as {}".format(shader, var_name))
-    args = ["python3", "compile_shader.py", glslc, shader, var_name, "-DBLOCK_SIZE={}".format(block_size)]
+    args = ["python3", "compile_shader.py", glslc, shader, var_name, "-DBLOCK_SIZE={}".format(block_size),
+            "-O"]
     compiled_shaders += subprocess.check_output(args).decode("utf-8")
 
 with open("embed_marching_cubes_shaders.js", "w") as f:

@@ -33,7 +33,7 @@ for variant_name, defines in variants.items():
         fname, ext = os.path.splitext(os.path.basename(shader))
         var_name ="{}_{}_{}_spv".format(fname, variant_name, ext[1:])
         print("Embedding {} as {}".format(shader, var_name))
-        args = ["python3", "compile_shader.py", glslc, shader, var_name]
+        args = ["python3", "compile_shader.py", glslc, shader, var_name, "-O"]
         args.extend(defines)
         compiled_shaders += subprocess.check_output(args).decode("utf-8")
 
