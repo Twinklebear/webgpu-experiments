@@ -19,7 +19,7 @@ void main(void) {
         }
     }
     uint v = gl_GlobalInvocationID.x
-        + volume_dims.x * (gl_GlobalInvocationID.y + volume_dims.y * gl_GlobalInvocationID.z);
+        + (volume_dims.x - 1) * (gl_GlobalInvocationID.y + (volume_dims.y - 1) * gl_GlobalInvocationID.z);
     voxel_active[v] = case_index != 0 && case_index != 255 ? 1 : 0;
 }
 

@@ -11,24 +11,24 @@ layout(set = 0, binding = 1, std140) uniform VolumeDims {
     uvec4 volume_dims;
 };
 
-const ivec3[8] index_to_vertex = ivec3[8](
-	ivec3(0, 0, 0),
-	ivec3(1, 0, 0),
-	ivec3(1, 1, 0),
-	ivec3(0, 1, 0),
-	ivec3(0, 0, 1),
-	ivec3(1, 0, 1),
-	ivec3(1, 1, 1),
-	ivec3(0, 1, 1)
+const uvec3[8] index_to_vertex = uvec3[8](
+	uvec3(0, 0, 0),
+	uvec3(1, 0, 0),
+	uvec3(1, 1, 0),
+	uvec3(0, 1, 0),
+	uvec3(0, 0, 1),
+	uvec3(1, 0, 1),
+	uvec3(1, 1, 1),
+	uvec3(0, 1, 1)
 );
 
 float[8] compute_vertex_values() {
     float values[8];
     for (int i = 0; i < 8; ++i) {
-        const ivec3 v = index_to_vertex[i];
+        const uvec3 v = index_to_vertex[i];
 
         const uint voxel = ((gl_GlobalInvocationID.z + v.z) * volume_dims.y + gl_GlobalInvocationID.y + v.y) * volume_dims.x
-            + gl_GlobalInvocationID.x;
+            + gl_GlobalInvocationID.x + v.x;
         // TODO: later can change this to texelFetch when copyBufferToTexture supports 3D texture
         values[i] = volume[voxel];
     }

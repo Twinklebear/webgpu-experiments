@@ -62,16 +62,20 @@
     }
     */
 
+    var isovalue = 128;
     var [isovalueBuffer, mapping] = device.createBufferMapped({
         size: 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    new Float32Array(mapping).set([64.0]);
+    new Float32Array(mapping).set([isovalue]);
+    console.log(`Isovalue ${isovalue}`);
     isovalueBuffer.unmap();
 
     var activeVoxelScanner = new ExclusiveScanner(device);
 
-    var alignedActiveVoxelSize = activeVoxelScanner.getAlignedSize(volumeData.length);
+    var voxelsToProcess = (volumeDims[0] - 1) * (volumeDims[1] - 1) * (volumeDims[2] - 1);
+    console.log(`Voxels to process ${voxelsToProcess}`);
+    var alignedActiveVoxelSize = activeVoxelScanner.getAlignedSize(voxelsToProcess);
     var [voxelActiveBuffer, mapping] = device.createBufferMapped({
         size: alignedActiveVoxelSize * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
@@ -146,7 +150,7 @@
         var pass = commandEncoder.beginComputePass();
         pass.setPipeline(computeActivePipeline);
         pass.setBindGroup(0, computeActiveBG);
-        pass.dispatch(volumeDims[0], volumeDims[1], volumeDims[2]);
+        pass.dispatch(volumeDims[0] - 1, volumeDims[1] - 1, volumeDims[2] - 1);
         pass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
