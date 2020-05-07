@@ -20,8 +20,10 @@ var ExclusiveScanner = function(device) {
     this.maxScanSize = this.blockSize * this.blockSize;
     console.log(`Block size: ${this.blockSize}, max scan size: ${this.maxScanSize}`);
 
+    /*
     this.fence = device.defaultQueue.createFence();
     this.fenceValue = 1;
+    */
 
     this.scanBlocksLayout = device.createBindGroupLayout({
         entries: [
@@ -302,10 +304,12 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, size) {
 
 async function exclusive_scan(scanner) {
     scanner.device.defaultQueue.submit([scanner.commandBuffer]);
-    //scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
+    /*
+    scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
 
-    //await scanner.fence.onCompletion(scanner.fenceValue);
-    //scanner.fenceValue += 1;
+    await scanner.fence.onCompletion(scanner.fenceValue);
+    scanner.fenceValue += 1;
+    */
 
     // Readback the final carry out, which is the sum
     var mapping = new Uint32Array(await scanner.readbackBuf.mapReadAsync());
