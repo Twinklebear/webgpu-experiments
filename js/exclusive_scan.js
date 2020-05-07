@@ -283,24 +283,20 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
         commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.carryBuf, 0, 4);
     }
     // Readback the the last element to return the total sum as well
-    commandEncoder.copyBufferToBuffer(this.inputBuf, (array.length - 1) * 4, this.readbackBuf, 0, 4);
+    commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.readbackBuf, 0, 4);
     this.commandBuffer = commandEncoder.finish();
 }
 
-async function exclusive_scan(scanner, array) {
+async function exclusive_scan(scanner) {
     scanner.device.defaultQueue.submit([scanner.commandBuffer]);
     scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
 
     await scanner.fence.onCompletion(scanner.fenceValue);
     scanner.fenceValue += 1;
 
-    // Save the last element in the array so we can also return the total sum
-    // This is also stored in the final carry out
-    var lastElem = array[array.length - 1];
-
-    // Readback the result and write it to the input array
+    // Readback the final carry out, which is the sum
     var mapping = new Uint32Array(await scanner.readbackBuf.mapReadAsync());
-    var sum = mapping[0] + array[array.length - 1];
+    var sum = mapping[0];
     scanner.readbackBuf.unmap();
 
     return sum;
