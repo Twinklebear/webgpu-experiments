@@ -1,0 +1,73 @@
+#version 450 core
+
+#include "tri_table.glsl"
+
+const int[12][2] edge_vertices = {
+    {0, 1},
+    {1, 2},
+    {2, 3},
+    {3, 0},
+    {4, 5},
+    {6, 5},
+    {6, 7},
+    {7, 4},
+    {0, 4},
+    {1, 5},
+    {2, 6},
+    {3, 7},
+};
+
+layout(set = 1, binding = 0, std430) buffer ActiveVoxels {
+    uint active_voxels[];
+};
+
+layout(set = 1, binding = 1, std430) buffer VertexOffsets {
+    uint vertex_offsets[];
+};
+
+layout(set = 1, binding = 2, std430) buffer Vertices {
+    vec4 verts[];
+};
+
+vec3 lerp_verts(const ivec3 va, const ivec3 vb, const float fa, const float fb) {
+    float t = 0;
+    if (abs(fa - fb) < 0.001) {
+        t = 0.0;
+    } else {
+        t = (isovalue - fa) / (fb - fa);
+    }
+    return vec3(va[0] + t * (vb[0] - va[0]),
+            va[1] + t * (vb[1] - va[1]),
+            va[2] + t * (vb[2] - va[2]));
+}
+
+void main(void) {
+    const uint voxel_id = active_voxels[gl_GlobalInvocationID.x];
+    const uvec3 voxel_pos = voxel_id_to_voxel(voxel_id);
+    const float values[8] = compute_vertex_values(voxel_pos);
+    uint case_index = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (values[i] <= isovalue) {
+            case_index |= 1 << i;
+        }
+    }
+
+    uint vertex_offset = vertex_offsets[gl_GlobalInvocationID.x];
+    // The triangle table gives us the mapping from index to actual
+    // triangles to return for this configuration
+    for (uint t = 0; tri_table[case_index][t] != -1; ++t) {
+        const uint v0 = edge_vertices[tri_table[case_index][t]][0];
+        const uint v1 = edge_vertices[tri_table[case_index][t]][1];
+
+        const vec3 v = lerp_verts(index_to_vertex[v0], index_to_vertex[v1],
+                values[v0], values[v1]);
+
+        verts[vertex_offset + t] = vec4(
+                v.x + voxel_pos.x + 0.5,
+                v.y + voxel_pos.y + 0.5,
+                v.z + voxel_pos.z + 0.5,
+                1.0);
+    }
+}
+
+

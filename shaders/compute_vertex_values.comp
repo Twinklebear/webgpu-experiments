@@ -1,6 +1,8 @@
 #ifndef COMPUTE_VERTEX_VALUES_COMP
 #define COMPUTE_VERTEX_VALUES_COMP
 
+#define TRI_TABLE_SIZE 256
+
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, std430) buffer Volume {
@@ -9,26 +11,33 @@ layout(set = 0, binding = 0, std430) buffer Volume {
 
 layout(set = 0, binding = 1, std140) uniform VolumeDims {
     uvec4 volume_dims;
+    float isovalue;
 };
 
-const uvec3[8] index_to_vertex = uvec3[8](
-	uvec3(0, 0, 0),
-	uvec3(1, 0, 0),
-	uvec3(1, 1, 0),
-	uvec3(0, 1, 0),
-	uvec3(0, 0, 1),
-	uvec3(1, 0, 1),
-	uvec3(1, 1, 1),
-	uvec3(0, 1, 1)
-);
+const ivec3[8] index_to_vertex = {
+	ivec3(0, 0, 0),
+	ivec3(1, 0, 0),
+	ivec3(1, 1, 0),
+	ivec3(0, 1, 0),
+	ivec3(0, 0, 1),
+	ivec3(1, 0, 1),
+	ivec3(1, 1, 1),
+	ivec3(0, 1, 1)
+};
 
-float[8] compute_vertex_values() {
+uvec3 voxel_id_to_voxel(uint id) {
+    return uvec3(id % (volume_dims[0] - 1),
+            (id / (volume_dims[0] - 1)) % (volume_dims[1] - 1),
+            id / ((volume_dims[0] - 1) * (volume_dims[1] - 1)));
+}
+
+float[8] compute_vertex_values(uvec3 voxel_pos) {
     float values[8];
     for (int i = 0; i < 8; ++i) {
         const uvec3 v = index_to_vertex[i];
 
-        const uint voxel = ((gl_GlobalInvocationID.z + v.z) * volume_dims.y + gl_GlobalInvocationID.y + v.y) * volume_dims.x
-            + gl_GlobalInvocationID.x + v.x;
+        const uint voxel = ((voxel_pos.z + v.z) * volume_dims.y + voxel_pos.y + v.y) * volume_dims.x
+            + voxel_pos.x + v.x;
         // TODO: later can change this to texelFetch when copyBufferToTexture supports 3D texture
         values[i] = volume[voxel];
     }

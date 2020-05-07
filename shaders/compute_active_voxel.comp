@@ -2,16 +2,12 @@
 
 #include "compute_vertex_values.comp"
 
-layout(set = 0, binding = 2, std430) buffer Active {
+layout(set = 1, binding = 0, std430) buffer Active {
     uint voxel_active[];
 };
 
-layout(set = 0, binding = 3, std140) uniform IsoValue {
-    float isovalue;
-};
-
 void main(void) {
-    const float values[8] = compute_vertex_values();
+    const float values[8] = compute_vertex_values(gl_GlobalInvocationID);
     uint case_index = 0;
     for (int i = 0; i < 8; ++i) {
         if (values[i] <= isovalue) {
@@ -20,6 +16,6 @@ void main(void) {
     }
     uint v = gl_GlobalInvocationID.x
         + (volume_dims.x - 1) * (gl_GlobalInvocationID.y + (volume_dims.y - 1) * gl_GlobalInvocationID.z);
-    voxel_active[v] = case_index != 0 && case_index != 255 ? 1 : 0;
+    voxel_active[v] = case_index != 0 && case_index != TRI_TABLE_SIZE - 1 ? 1 : 0;
 }
 
