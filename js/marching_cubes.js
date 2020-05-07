@@ -11,18 +11,25 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var volumeName = "Neghip";
+    var volumeName = "Skull";
     var volumeData = await fetch(makeVolumeURL(volumeName))
         .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
 
     // Note: bytes per row has to be multiple of 256, so smaller volumes would
     // need padding later on when using textures
     var volumeDims = getVolumeDimensions(volumeName);
-    var isovalue = 128;
+    var isovalueSlider = document.getElementById("isovalue");
+    isovalueSlider.value = 128;
+    var currentIsovalue = isovalueSlider.value;
+
+    var mcInfo = document.getElementById("mcInfo");
 
     var marchingCubes = new MarchingCubes(device, volumeData, volumeDims);
-    var totalVerts = await marchingCubes.computeSurface();
-    console.log(`total vertices ${totalVerts}`);
+    var start = performance.now();
+    var totalVerts = await marchingCubes.computeSurface(currentIsovalue);
+    var end = performance.now();
+    console.log(`total vertices ${totalVerts} in ${end - start}ms`);
+    mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms`;
 
     // Render it!
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
@@ -150,7 +157,27 @@
         }
     });
 
-    var frame = function() {
+    var animationFrame = function() {
+        var resolve = null;
+        var promise = new Promise(r => resolve = r);
+        window.requestAnimationFrame(resolve);
+        return promise
+    };
+
+    requestAnimationFrame(animationFrame);
+
+    while (true) {
+        await animationFrame();
+
+        if (isovalueSlider.value != currentIsovalue) {
+            currentIsovalue = isovalueSlider.value;
+            var start = performance.now();
+            totalVerts = await marchingCubes.computeSurface(currentIsovalue);
+            var end = performance.now();
+            console.log(`Computation took ${end - start}ms`);
+            mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms`;
+        }
+
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
 
         var commandEncoder = device.createCommandEncoder();
@@ -173,9 +200,6 @@
 
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
-
-        requestAnimationFrame(frame);
     }
-    requestAnimationFrame(frame);
 })();
 

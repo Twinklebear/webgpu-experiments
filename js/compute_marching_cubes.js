@@ -57,7 +57,6 @@ var MarchingCubes = function(device, volume, volumeDims) {
     // of uint32, so determine the max dispatch size we should use for each
     // individual aligned chunk
     this.maxDispatchSize = Math.floor((2 * 65535 * 4) / 256) * 256;
-    console.log(`max dispatch: ${this.maxDispatchSize}`);
 
     this.volumeDataBGLayout = device.createBindGroupLayout({
         entries: [
@@ -91,9 +90,7 @@ var MarchingCubes = function(device, volume, volumeDims) {
         ]
     });
 
-    console.log(volumeDims);
     var voxelsToProcess = (volumeDims[0] - 1) * (volumeDims[1] - 1) * (volumeDims[2] - 1);
-    console.log(`Voxels to process ${voxelsToProcess}`);
 
     this.voxelActiveBuffer = device.createBuffer({
         size: voxelsToProcess * 4,
@@ -240,9 +237,20 @@ var MarchingCubes = function(device, volume, volumeDims) {
     });
 }
 
-MarchingCubes.prototype.computeSurface = async function() {
+MarchingCubes.prototype.computeSurface = async function(isovalue) {
+    // Upload the isovalue
+    var [upload, mapping] = this.device.createBufferMapped({
+        size: 4,
+        usage: GPUBufferUsage.COPY_SRC,
+    });
+    new Float32Array(mapping).set([isovalue]);
+    upload.unmap();
+
+    var commandEncoder = this.device.createCommandEncoder();
+    commandEncoder.copyBufferToBuffer(upload, 0, this.volumeInfoBuffer, 16, 4);
+    this.device.defaultQueue.submit([commandEncoder.finish()]);
+
     var totalActive = await this.computeActiveVoxels();
-    console.log(totalActive);
     var activeVoxelIds = this.compactActiveVoxels(totalActive);
 
     // Note: Both compute num verts and compute verts might also need chunking
@@ -271,8 +279,7 @@ MarchingCubes.prototype.computeActiveVoxels = async function() {
     var start = performance.now();
     var totalActive = await this.activeVoxelScanner.scan();
     var end = performance.now();
-    console.log(`scan took ${end - start}`);
-    console.log(`Total active voxels ${totalActive}`);
+    console.log(`Active voxel scan took ${end - start}`);
     return totalActive;
 }
 
@@ -406,7 +413,7 @@ MarchingCubes.prototype.computeNumVertices = async function(totalActive, activeV
     // TODO: could also re-uase
     var numVertsBuffer = this.device.createBuffer({
         size: alignedNumVertsSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
 
     var computeNumVertsBG = this.device.createBindGroup({
@@ -438,7 +445,11 @@ MarchingCubes.prototype.computeNumVertices = async function(totalActive, activeV
 
     // Scan to compute total number of vertices and offsets for each voxel to write its output
     this.numVertsScanner.prepareGPUInput(numVertsBuffer, alignedNumVertsSize, totalActive);
+
+    var start = performance.now();
     var totalVerts = await this.numVertsScanner.scan();
+    var end = performance.now();
+    console.log(`Vertex count scan took ${end - start}`);
     return [totalVerts, numVertsBuffer];
 }
 

@@ -266,8 +266,12 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     // over the results of the previous chunks
     var commandEncoder = this.device.createCommandEncoder();
 
-    // Clear the carry buffer
+    // Clear the carry buffer and the readback sum entry if it's not scan size aligned
     commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.carryBuf, 0, 8);
+    // TODO: Lingering bug on FF, seems like the buffer or scan input isn't cleared?
+    if (this.dataSize < this.inputSize) {
+        commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.inputBuf, this.dataSize * 4, 8);
+    }
     for (var i = 0; i < numChunks; ++i) {
         var nWorkGroups = Math.min((this.inputSize - i * this.maxScanSize) / this.blockSize, this.blockSize);
 
