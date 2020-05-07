@@ -180,7 +180,7 @@
 
     // Compute total number of active voxels and offsets for each in the compact buffer
     var start = performance.now();
-    var totalActive = await exclusive_scan(activeVoxelScanner);
+    var totalActive = await activeVoxelScanner.scan();
     var end = performance.now();
     console.log(`scan took ${end - start}`);
     console.log(`Total active voxels ${totalActive}`);
@@ -403,7 +403,7 @@
     // Scan to compute total number of vertices and offsets for each voxel to write its output
     numVertsScanner.prepareGPUInput(numVertsBuffer, alignedNumVertsSize, totalActive);
     var start = performance.now();
-    var totalVerts = await exclusive_scan(numVertsScanner);
+    var totalVerts = await numVertsScanner.scan();
     var end = performance.now();
     console.log(`scan took ${end - start}`);
     console.log(`Total verts ${totalVerts}`);

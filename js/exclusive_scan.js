@@ -306,19 +306,19 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     this.commandBuffer = commandEncoder.finish();
 }
 
-async function exclusive_scan(scanner) {
-    scanner.device.defaultQueue.submit([scanner.commandBuffer]);
+ExclusiveScanner.prototype.scan = async function() {
+    this.device.defaultQueue.submit([this.commandBuffer]);
     /*
-    scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
+    this.device.defaultQueue.signal(this.fence, scanner.fenceValue);
 
-    await scanner.fence.onCompletion(scanner.fenceValue);
-    scanner.fenceValue += 1;
+    await this.fence.onCompletion(this.fenceValue);
+    this.fenceValue += 1;
     */
 
     // Readback the final carry out, which is the sum
-    var mapping = new Uint32Array(await scanner.readbackBuf.mapReadAsync());
+    var mapping = new Uint32Array(await this.readbackBuf.mapReadAsync());
     var sum = mapping[0];
-    scanner.readbackBuf.unmap();
+    this.readbackBuf.unmap();
 
     return sum;
 }
