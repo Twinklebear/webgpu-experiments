@@ -29,7 +29,7 @@
     var totalVerts = await marchingCubes.computeSurface(currentIsovalue);
     var end = performance.now();
     console.log(`total vertices ${totalVerts} in ${end - start}ms`);
-    mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms`;
+    mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms. Isovalue = ${currentIsovalue}`;
 
     // Render it!
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
@@ -175,7 +175,7 @@
             totalVerts = await marchingCubes.computeSurface(currentIsovalue);
             var end = performance.now();
             console.log(`Computation took ${end - start}ms`);
-            mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms`;
+            mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms. Isovalue = ${currentIsovalue}`;
         }
 
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
