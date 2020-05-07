@@ -108,17 +108,30 @@ var ExclusiveScanner = function(device) {
     this.clearCarryBuf = clearCarryBuf;
 }
 
-ExclusiveScanner.prototype.prepareInput = function(array) {
-    this.inputSize = alignTo(array.length, this.blockSize)
+ExclusiveScanner.prototype.getAlignedSize = function(size) {
+    return alignTo(size, this.blockSize)
+}
+
+ExclusiveScanner.prototype.prepareInput = function(cpuArray) {
+    var alignedSize = alignTo(cpuArray.length, this.blockSize)
 
     // Upload input and pad to block size elements
     var [inputBuf, mapping] = this.device.createBufferMapped({
-        size: this.inputSize * 4,
+        size: alignedSize * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
-    new Uint32Array(mapping).set(array);
+    new Uint32Array(mapping).set(cpuArray);
     inputBuf.unmap();
-    this.inputBuf = inputBuf;
+
+    this.prepareGPUInput(inputBuf, alignedSize);
+}
+
+ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, size) {
+    if (this.getAlignedSize(size) != size) {
+        alert("Error: GPU input must be aligned to getAlignedSize");
+    }
+    this.inputSize = size;
+    this.inputBuf = gpuBuffer
 
     // Block sum buffer
     var [blockSumBuf, mapping] = this.device.createBufferMapped({
@@ -143,7 +156,7 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
             {
                 binding: 0,
                 resource: {
-                    buffer: inputBuf,
+                    buffer: this.inputBuf,
                     size: Math.min(this.maxScanSize * 4, this.inputSize),
                     offset: 0,
                 }
@@ -181,7 +194,7 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
             {
                 binding: 0,
                 resource: {
-                    buffer: inputBuf,
+                    buffer: this.inputBuf,
                     size: Math.min(this.maxScanSize * 4, this.inputSize),
                     offset: 0,
                 }
@@ -206,7 +219,7 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
                 {
                     binding: 0,
                     resource: {
-                        buffer: inputBuf,
+                        buffer: this.inputBuf,
                         size: (this.inputSize % this.maxScanSize) * 4,
                         offset: 0,
                     }
@@ -225,7 +238,7 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
                 {
                     binding: 0,
                     resource: {
-                        buffer: inputBuf,
+                        buffer: this.inputBuf,
                         size: (this.inputSize % this.maxScanSize) * 4,
                         offset: 0,
                     }
@@ -289,10 +302,10 @@ ExclusiveScanner.prototype.prepareInput = function(array) {
 
 async function exclusive_scan(scanner) {
     scanner.device.defaultQueue.submit([scanner.commandBuffer]);
-    scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
+    //scanner.device.defaultQueue.signal(scanner.fence, scanner.fenceValue);
 
-    await scanner.fence.onCompletion(scanner.fenceValue);
-    scanner.fenceValue += 1;
+    //await scanner.fence.onCompletion(scanner.fenceValue);
+    //scanner.fenceValue += 1;
 
     // Readback the final carry out, which is the sum
     var mapping = new Uint32Array(await scanner.readbackBuf.mapReadAsync());
