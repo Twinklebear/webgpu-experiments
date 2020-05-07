@@ -8,7 +8,8 @@ if len(sys.argv) < 2:
     print("Usage <glslc> <shaders...>")
 
 glslc = sys.argv[1]
-shaders = ["prefix_sum.comp", "block_prefix_sum.comp", "add_block_sums.comp"]
+shaders = ["prefix_sum.comp", "block_prefix_sum.comp", "add_block_sums.comp",
+        "compute_active_voxel.comp"]
 
 try:
     os.stat("embed_marching_cubes_shaders.js")

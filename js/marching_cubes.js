@@ -11,114 +11,171 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    /*
     var volumeData = await fetch(makeVolumeURL("Fuel"))
         .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
-    console.log(volumeData);
-    var maxVal = 0;
-    for (var i = 0; i < volumeData.length; ++i) {
-        maxVal = Math.max(maxVal, volumeData[i]);
+
+    // Note: bytes per row has to be multiple of 256, so smaller volumes would
+    // need padding later on when using textures
+    var volumeDims = getVolumeDimensions("Fuel");
+    var [volumeDimsBuffer, mapping] = device.createBufferMapped({
+        size: 4 * 4,
+        usage: GPUBufferUsage.UNIFORM,
+    });
+    new Uint32Array(mapping).set(volumeDims);
+    console.log(new Uint32Array(mapping));
+    volumeDimsBuffer.unmap();
+
+    var [volumeBuffer, mapping] = device.createBufferMapped({
+        size: volumeData.length * 4,
+        usage: GPUBufferUsage.STORAGE,
+    });
+    new Uint32Array(mapping).set(volumeData);
+
+    console.log(new Uint32Array(mapping));
+    volumeBuffer.unmap();
+
+    /*
+    var volumeTexture = device.createTexture({
+        size: volumeDims,
+        //format: "r8unorm",
+        format: "r32float",
+        usage: GPUTextureUsage.STORAGE, // | GPUTextureUsage.COPY_DST,
+    });
+    {
+        // TODO: Chrome Canary/Dawn doesn't support copying data into 3D textures yet
+        // As a hack use a compute shader which copies the buffer into a 3D texture
+        // but this would also need to use a texture format that supports use as texture
+        // storage in Chrome/Dawn (so, r32float)
+        // TODO: It also doesn't support write/read storage textures at all yet
+
+        {
+        var commandEncoder = device.createCommandEncoder();
+        var bufferCopyView = {
+            buffer: volumeUploadBuffer,
+            bytesPerRow: volumeDims[0],
+        };
+        var textureCopyView = {
+            texture: volumeTexture,
+        };
+        commandEncoder.copyBufferToTexture(bufferCopyView, textureCopyView, volumeDims);
+        device.defaultQueue.submit([commandEncoder.finish()]);
     }
-    console.log(`Max val ${maxVal}`);
     */
 
-    var scanner = new ExclusiveScanner(device);
-
-    var array = [];
-    var size = 256;
-    for (var i = 0; i < size * size * size; ++i) {
-        array.push(Math.floor(Math.random() * 100));
-        //array.push(1);
-    }
-    console.log(`Scanning ${array.length} elements`);
-
-    var serialOut = Array.from(array);
-    var totalSerialTime = 0;
-    var numIterations = 1;
-    for (var i = 0; i < numIterations; ++i) {
-        var serialStart = performance.now();
-        var serialSum = serialExclusiveScan(array, serialOut);
-        var serialEnd = performance.now();
-        totalSerialTime += serialEnd - serialStart;
-    }
-    console.log(`Avg. serial time ${totalSerialTime / numIterations}`);
-
-    scanner.prepareInput(array);
-
-    var [uploadBuf, mapping] = device.createBufferMapped({
-        size: array.length * 4,
-        usage: GPUBufferUsage.COPY_SRC | GPUBufferUsage.MAP_WRITE
+    var [isovalueBuffer, mapping] = device.createBufferMapped({
+        size: 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
-    new Uint32Array(mapping).set(array);
-    uploadBuf.unmap();
+    new Float32Array(mapping).set([64.0]);
+    isovalueBuffer.unmap();
 
-    var commandEncoder = device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(uploadBuf, 0, scanner.inputBuf, 0, array.length * 4);
-    var setInputCommandBuf = commandEncoder.finish();
-    // Run a warm up scan to build the pipeline and setup
-    var firstParallelStart = performance.now();
-    var sum = await exclusive_scan(scanner, array);
-    var firstParallelEnd = performance.now();
-    console.log(`First parallel launch ${firstParallelEnd - firstParallelStart}`);
+    var activeVoxelScanner = new ExclusiveScanner(device);
 
-    var totalParallelTime = 0;
-    for (var i = 0; i < numIterations; ++i) {
-        device.defaultQueue.submit([setInputCommandBuf]);
+    var alignedActiveVoxelSize = activeVoxelScanner.getAlignedSize(volumeData.length);
+    var [voxelActiveBuffer, mapping] = device.createBufferMapped({
+        size: alignedActiveVoxelSize * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
+    new Uint32Array(mapping).fill(0);
+    voxelActiveBuffer.unmap();
 
-        var parallelStart = performance.now();
-        var sum = await exclusive_scan(scanner, array);
-        var parallelEnd = performance.now();
-        totalParallelTime += parallelEnd - parallelStart;
+    {
+        // Compute active voxels: mark 1 or 0 for if a voxel is active
+        // in the data set
+        var computeActiveVoxelsBGLayout = device.createBindGroupLayout({
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    type: "storage-buffer"
+                },
+                {
+                    binding: 1,
+                    visibility: GPUShaderStage.COMPUTE,
+                    type: "uniform-buffer"
+                },
+                {
+                    binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    type: "storage-buffer"
+                },
+                {
+                    binding: 3,
+                    visibility: GPUShaderStage.COMPUTE,
+                    type: "uniform-buffer"
+                }
+            ]
+        });
+        var computeActivePipeline = device.createComputePipeline({
+            layout: device.createPipelineLayout({bindGroupLayouts: [computeActiveVoxelsBGLayout]}),
+            computeStage: {
+                module: device.createShaderModule({code: compute_active_voxel_comp_spv}),
+                entryPoint: "main"
+            }
+        });
+        var computeActiveBG = device.createBindGroup({
+            layout: computeActiveVoxelsBGLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: volumeBuffer
+                    }
+                },
+                {
+                    binding: 1,
+                    resource: {
+                        buffer: volumeDimsBuffer
+                    }
+                },
+                {
+                    binding: 2,
+                    resource: {
+                        buffer: voxelActiveBuffer
+                    }
+                },
+                {
+                    binding: 3,
+                    resource: {
+                        buffer: isovalueBuffer
+                    }
+                }
+            ]
+        });
+        var commandEncoder = device.createCommandEncoder();
+        var pass = commandEncoder.beginComputePass();
+        pass.setPipeline(computeActivePipeline);
+        pass.setBindGroup(0, computeActiveBG);
+        pass.dispatch(volumeDims[0], volumeDims[1], volumeDims[2]);
+        pass.endPass();
+        device.defaultQueue.submit([commandEncoder.finish()]);
     }
-    console.log(`Avg. parallel time ${totalParallelTime / numIterations}`);
+
+    activeVoxelScanner.prepareGPUInput(voxelActiveBuffer, alignedActiveVoxelSize);
+
+    var start = performance.now();
+    var totalActive = await exclusive_scan(activeVoxelScanner);
+    var end = performance.now();
+    console.log(`scan took ${end - start}`);
+    console.log(`Total active voxels ${totalActive}`);
 
     // Readback the result. Not timed since the future Marching Cubes method will
     // keep this data on the GPU. So this should in the future take a GPU buffer
-    var readbackBuf = scanner.device.createBuffer({
-        size: array.length * 4,
+    var readbackBuf = activeVoxelScanner.device.createBuffer({
+        size: alignedActiveVoxelSize * 4,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
     var commandEncoder = device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(scanner.inputBuf, 0, readbackBuf, 0, array.length * 4);
+    commandEncoder.copyBufferToBuffer(activeVoxelScanner.inputBuf, 0, readbackBuf, 0, volumeData.length);
     device.defaultQueue.submit([commandEncoder.finish()]);
 
-    // Note: no fences on FF nightly at the moment
-    //await new Promise(r => setTimeout(r, 2000));
     var fence = device.defaultQueue.createFence();
     device.defaultQueue.signal(fence, 1);
     await fence.onCompletion(1);
 
     var mapping = new Uint32Array(await readbackBuf.mapReadAsync());
-    for (var i = 0; i < array.length; ++i) {
-        array[i] = mapping[i];
-    }
-
-    console.log(array);
-
-    if (serialSum != sum) {
-        console.log("Sums don't match");
-        console.log(`parallel sum ${sum}, serial ${serialSum}`);
-    } else {
-        console.log("Sums match");
-    }
-
-    var matches = serialOut.every(function(v, i) { return array[i] == v; });
-    if (!matches) {
-        console.log("Parallel result does not match serial");
-        for (var i = 0; i < array.length; ++i) {
-            if (Math.abs(array[i] - serialOut[i]) > 0.01) {
-                console.log(`First differing elements at ${i}: parallel got ${array[i]}, expected ${serialOut[i]}`);
-                break;
-            }
-        }
-        console.log("parallel result");
-        console.log(array);
-        console.log("serial result");
-        console.log(serialOut);
-    } else {
-        console.log("Results match");
-    }
+    console.log(mapping);
 })();
 
 

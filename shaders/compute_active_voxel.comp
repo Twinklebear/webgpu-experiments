@@ -1,0 +1,25 @@
+#version 450 core
+
+#include "compute_vertex_values.comp"
+
+layout(set = 0, binding = 2, std430) buffer Active {
+    uint voxel_active[];
+};
+
+layout(set = 0, binding = 3, std140) uniform IsoValue {
+    float isovalue;
+};
+
+void main(void) {
+    const float values[8] = compute_vertex_values();
+    uint case_index = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (values[i] <= isovalue) {
+            case_index |= 1 << i;
+        }
+    }
+    uint v = gl_GlobalInvocationID.x
+        + volume_dims.x * (gl_GlobalInvocationID.y + volume_dims.y * gl_GlobalInvocationID.z);
+    voxel_active[v] = case_index != 0 && case_index != 255 ? 1 : 0;
+}
+

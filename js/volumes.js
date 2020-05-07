@@ -16,3 +16,8 @@ var makeVolumeURL = function(name) {
 	return "https://www.dl.dropboxusercontent.com/s/" + volumes[name] + "?dl=1";
 }
 
+var getVolumeDimensions = function(name) {
+	var m = volumes[name].match(fileRegex);
+	return [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
+}
+
