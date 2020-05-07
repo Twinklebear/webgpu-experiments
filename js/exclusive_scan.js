@@ -125,14 +125,15 @@ ExclusiveScanner.prototype.prepareInput = function(cpuArray) {
     new Uint32Array(mapping).set(cpuArray);
     inputBuf.unmap();
 
-    this.prepareGPUInput(inputBuf, alignedSize);
+    this.prepareGPUInput(inputBuf, alignedSize, cpuArray.length);
 }
 
-ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, size) {
-    if (this.getAlignedSize(size) != size) {
+ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, dataSize) {
+    if (this.getAlignedSize(alignedSize) != alignedSize) {
         alert("Error: GPU input must be aligned to getAlignedSize");
     }
-    this.inputSize = size;
+    this.inputSize = alignedSize;
+    this.dataSize = dataSize;
     this.inputBuf = gpuBuffer
 
     // Block sum buffer
@@ -261,7 +262,6 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, size) {
         this.offsets.set([i * this.maxScanSize * 4], i);
     }
 
-    var numChunks = Math.ceil(this.inputSize / (this.blockSize * this.blockSize));
     // Scan through the data in chunks, updating carry in/out at the end to carry
     // over the results of the previous chunks
     var commandEncoder = this.device.createCommandEncoder();
@@ -298,7 +298,11 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, size) {
         commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.carryBuf, 0, 4);
     }
     // Readback the the last element to return the total sum as well
-    commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.readbackBuf, 0, 4);
+    if (this.dataSize < this.inputSize) {
+        commandEncoder.copyBufferToBuffer(this.inputBuf, this.dataSize * 4, this.readbackBuf, 0, 4);
+    } else {
+        commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.readbackBuf, 0, 4);
+    }
     this.commandBuffer = commandEncoder.finish();
 }
 
