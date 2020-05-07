@@ -10,7 +10,12 @@ layout(set = 0, binding = 1) buffer Offsets {
     uint offsets[];
 };
 
-layout(set = 0, binding = 2) buffer Output {
+// The compaction execution offset chunk we're running
+layout(set = 0, binding = 2) uniform CompactionOffset {
+    uint compact_offset;
+};
+
+layout(set = 0, binding = 3) buffer Output {
     uint outputs[];
 };
 
@@ -18,7 +23,7 @@ void main(void) {
     // Note: this is just for compacting down id's of "active" elements, so 0's are inherently
     // things we don't want to output.
     if (inputs[gl_GlobalInvocationID.x] != 0) {
-        outputs[offsets[gl_GlobalInvocationID.x]] = gl_GlobalInvocationID.x;
+        outputs[offsets[gl_GlobalInvocationID.x]] = gl_GlobalInvocationID.x + compact_offset;
     }
 }
 

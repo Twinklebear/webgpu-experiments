@@ -11,14 +11,14 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var volumeName = "Fuel";
+    var volumeName = "Neghip";
     var volumeData = await fetch(makeVolumeURL(volumeName))
         .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
 
     // Note: bytes per row has to be multiple of 256, so smaller volumes would
     // need padding later on when using textures
     var volumeDims = getVolumeDimensions(volumeName);
-    var isovalue = 128;
+    var isovalue = 80;
 
     // Info buffer contains the volume dims and the isovalue
     var [volumeInfoBuffer, mapping] = device.createBufferMapped({
@@ -67,6 +67,16 @@
     }
     */
 
+    // Not sure how to query this limit, assuming this size based on OpenGL
+    // In a less naive implementation doing some block-based implementation w/
+    // larger group sizes might be better as well
+    // We also need to make sure the offset we'll end up using for the
+    // dynamic offsets is aligned to 256 bytes. We're offsetting into arrays
+    // of uint32, so determine the max dispatch size we should use for each
+    // individual aligned chunk
+    var maxDispatchSize = Math.floor((2 * 65535 * 4) / 256) * 256;
+    console.log(`max dispatch: ${maxDispatchSize}`);
+
     var volumeDataBGLayout = device.createBindGroupLayout({
         entries: [
             {
@@ -101,6 +111,7 @@
 
     var activeVoxelScanner = new ExclusiveScanner(device);
 
+    console.log(volumeDims);
     var voxelsToProcess = (volumeDims[0] - 1) * (volumeDims[1] - 1) * (volumeDims[2] - 1);
     console.log(`Voxels to process ${voxelsToProcess}`);
     var [voxelActiveBuffer, mapping] = device.createBufferMapped({
@@ -111,10 +122,12 @@
     voxelActiveBuffer.unmap();
 
     var alignedActiveVoxelSize = activeVoxelScanner.getAlignedSize(voxelsToProcess);
-    var activeVoxelOffsets = device.createBuffer({
+    var [activeVoxelOffsets, mapping] = device.createBufferMapped({
         size: alignedActiveVoxelSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC,
     });
+    new Uint32Array(mapping).fill(0);
+    activeVoxelOffsets.unmap();
 
     // Compute active voxels: mark 1 or 0 for if a voxel is active in the data set
     // TODO/NOTE: Larger datasets (beyond the 32-bit indexing we have in the shaders) could be
@@ -163,7 +176,7 @@
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
 
-    activeVoxelScanner.prepareGPUInput(activeVoxelOffsets, alignedActiveVoxelSize);
+    activeVoxelScanner.prepareGPUInput(activeVoxelOffsets, alignedActiveVoxelSize, voxelsToProcess);
 
     // Compute total number of active voxels and offsets for each in the compact buffer
     var start = performance.now();
@@ -183,15 +196,23 @@
                 {
                     binding: 0,
                     visibility: GPUShaderStage.COMPUTE,
-                    type: "storage-buffer"
+                    type: "storage-buffer",
+                    hasDynamicOffset: true
                 },
                 {
                     binding: 1,
                     visibility: GPUShaderStage.COMPUTE,
-                    type: "storage-buffer"
+                    type: "storage-buffer",
+                    hasDynamicOffset: true
                 },
                 {
                     binding: 2,
+                    visibility: GPUShaderStage.COMPUTE,
+                    type: "uniform-buffer",
+                    hasDynamicOffset: true
+                },
+                {
+                    binding: 3,
                     visibility: GPUShaderStage.COMPUTE,
                     type: "storage-buffer"
                 }
@@ -204,39 +225,121 @@
                 entryPoint: "main"
             }
         });
+
+        // No push constants in the API? This is really a hassle to hack together
+        // because I also have to obey (at least Dawn's rule is it part of the spec?)
+        // that the dynamic offsets be 256b aligned
+        // Please add push constants!
+        var numChunks = Math.ceil(voxelsToProcess / maxDispatchSize);
+        var [compactPassOffset, mapping] = device.createBufferMapped({
+            size: numChunks * 1024,
+            usage: GPUBufferUsage.UNIFORM
+        });
+        {
+            var map = new Uint32Array(mapping);
+            for (var i = 0; i < numChunks; ++i) {
+                map[i * 64] = i * maxDispatchSize;
+            }
+            compactPassOffset.unmap();
+        }
+
         var streamCompactBG = device.createBindGroup({
             layout: streamCompactLayout,
             entries: [
                 {
                     binding: 0,
                     resource: {
-                        buffer: voxelActiveBuffer
+                        buffer: voxelActiveBuffer,
+                        size: 4 * Math.min(voxelsToProcess, maxDispatchSize),
+                        offset: 0
                     }
                 },
                 {
                     binding: 1,
                     resource: {
-                        buffer: activeVoxelOffsets
+                        buffer: activeVoxelOffsets,
+                        size: 4 * Math.min(voxelsToProcess, maxDispatchSize),
+                        offset: 0
                     }
                 },
                 {
                     binding: 2,
+                    resource: {
+                        buffer: compactPassOffset,
+                        size: 4,
+                        offset: 0
+                    }
+                },
+                {
+                    binding: 3,
                     resource: {
                         buffer: activeVoxelIds
                     }
                 }
             ]
         });
+        var streamCompactRemainderBG = null;
+        if (voxelsToProcess % maxDispatchSize) {
+            streamCompactRemainderBG = device.createBindGroup({
+                layout: streamCompactLayout,
+                entries: [
+                    {
+                        binding: 0,
+                        resource: {
+                            buffer: voxelActiveBuffer,
+                            size: 4 * (voxelsToProcess % maxDispatchSize),
+                            offset: 0
+                        }
+                    },
+                    {
+                        binding: 1,
+                        resource: {
+                            buffer: activeVoxelOffsets,
+                            size: 4 * (voxelsToProcess % maxDispatchSize),
+                            offset: 0
+                        }
+                    },
+                    {
+                        binding: 2,
+                        resource: {
+                            buffer: compactPassOffset,
+                            size: 4,
+                            offset: 0
+                        }
+                    },
+                    {
+                        binding: 3,
+                        resource: {
+                            buffer: activeVoxelIds
+                        }
+                    }
+                ]
+            });
+        }
 
         var commandEncoder = device.createCommandEncoder();
         var pass = commandEncoder.beginComputePass();
         pass.setPipeline(streamCompactPipeline);
-        pass.setBindGroup(0, streamCompactBG);
-        pass.dispatch(voxelsToProcess, 1, 1);
+        for (var i = 0; i < numChunks; ++i) {
+            var numWorkGroups = Math.min(voxelsToProcess - i * maxDispatchSize, maxDispatchSize);
+            var offset = i * maxDispatchSize * 4;
+            if (numWorkGroups == maxDispatchSize) {
+                // These are supposed to be passed in REVERSE order of how they appear in the bindgroup layout!??
+                // This seems like a bug, the spec says it should be passed in increasing order of
+                // binding number https://gpuweb.github.io/gpuweb/#bind-group-layout-creation
+                // so I'd think this should be [offset, offset, i * 256]?
+                pass.setBindGroup(0, streamCompactBG, [i * 256, offset, offset]);
+            } else {
+                pass.setBindGroup(0, streamCompactRemainderBG, [i * 256, offset, offset]);
+            }
+            pass.dispatch(numWorkGroups, 1, 1);
+        }
         pass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
 
+    // Note: Both compute num verts and compute verts might also need chunking
+    // if the # of active voxels gets very high and exceeds what we can do in one launch
     // Determine the number of vertices generated by each active voxel
     var numVertsScanner = new ExclusiveScanner(device);
     var alignedNumVertsSize = numVertsScanner.getAlignedSize(totalActive);
@@ -298,7 +401,7 @@
     }
 
     // Scan to compute total number of vertices and offsets for each voxel to write its output
-    numVertsScanner.prepareGPUInput(numVertsBuffer, alignedNumVertsSize);
+    numVertsScanner.prepareGPUInput(numVertsBuffer, alignedNumVertsSize, totalActive);
     var start = performance.now();
     var totalVerts = await exclusive_scan(numVertsScanner);
     var end = performance.now();
@@ -373,6 +476,7 @@
         pass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
 
+        // No fences on FF nightly
         /*
         var fence = device.defaultQueue.createFence();
         device.defaultQueue.signal(fence, 1);
@@ -383,7 +487,6 @@
     }
 
     // Render it!
-
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
     const center = vec3.set(vec3.create(), 0.0, 0.0, 0.0);
     const up = vec3.set(vec3.create(), 0.0, 1.0, 0.0);
@@ -537,5 +640,4 @@
     }
     requestAnimationFrame(frame);
 })();
-
 
