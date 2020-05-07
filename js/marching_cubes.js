@@ -11,7 +11,7 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var volumeName = "Neghip";
+    var volumeName = "Fuel";
     var volumeData = await fetch(makeVolumeURL(volumeName))
         .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
 
@@ -44,19 +44,19 @@
         size: volumeDims,
         //format: "r8unorm",
         format: "r32float",
-        usage: GPUTextureUsage.STORAGE, // | GPUTextureUsage.COPY_DST,
+        usage: GPUTextureUsage.STORAGE | GPUTextureUsage.COPY_DST,
     });
     {
         // TODO: Chrome Canary/Dawn doesn't support copying data into 3D textures yet
         // As a hack use a compute shader which copies the buffer into a 3D texture
         // but this would also need to use a texture format that supports use as texture
         // storage in Chrome/Dawn (so, r32float)
+        // Also seems like FF nightly doesn't support it yet either
         // TODO: It also doesn't support write/read storage textures at all yet
 
-        {
         var commandEncoder = device.createCommandEncoder();
         var bufferCopyView = {
-            buffer: volumeUploadBuffer,
+            buffer: volumeBuffer,
             bytesPerRow: volumeDims[0],
         };
         var textureCopyView = {
