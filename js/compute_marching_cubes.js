@@ -301,7 +301,7 @@ MarchingCubes.prototype.compactActiveVoxels = function(totalActive) {
     // Please add push constants!
     var numChunks = Math.ceil(voxelsToProcess / this.maxDispatchSize);
     var [compactPassOffset, mapping] = this.device.createBufferMapped({
-        size: numChunks * 1024,
+        size: numChunks * 256,
         usage: GPUBufferUsage.UNIFORM
     });
     {
