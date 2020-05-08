@@ -89,7 +89,7 @@
         entries: [
             {
                 binding: 0,
-                visibility: GPUShaderStage.VERTEX,
+                visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
                 type: "uniform-buffer"
             },
             {
@@ -100,8 +100,10 @@
         ]
     });
 
+    // The proj_view matrix and eye position
+    var viewParamSize = (16 + 4) * 4;
     var viewParamBuf = device.createBuffer({
-        size: 4 * 4 * 4,
+        size: viewParamSize,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     var viewParamsBindGroup = device.createBindGroup({
@@ -184,13 +186,15 @@
         
         projView = mat4.mul(projView, proj, camera.camera);
         var [upload, uploadMap] = device.createBufferMapped({
-            size: 4 * 4 * 4,
+            size: viewParamSize,
             usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC
         });
-        new Float32Array(uploadMap).set(projView);
+        var uploadArry = new Float32Array(uploadMap);
+        uploadArry.set(projView);
+        uploadArry.set(camera.eyePos(), 16);
         upload.unmap();
 
-        commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 4 * 4 * 4);
+        commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, viewParamSize);
 
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
         renderPass.setPipeline(renderPipeline);

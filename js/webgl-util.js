@@ -322,7 +322,7 @@ ArcballCamera.prototype.updateCameraMatrix = function() {
 }
 
 ArcballCamera.prototype.eyePos = function() {
-    return [camera.invCamera[12], camera.invCamera[13], camera.invCamera[14]];
+    return [this.invCamera[12], this.invCamera[13], this.invCamera[14]];
 }
 
 ArcballCamera.prototype.eyeDir = function() {
