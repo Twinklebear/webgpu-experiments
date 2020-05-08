@@ -21,6 +21,9 @@ var MarchingCubes = function(device, volume, volumeDims) {
     volumeBuffer.unmap();
     this.volumeBuffer = volumeBuffer;
 
+    // TODO: Implement some upload chunking for large data (over 512*512*512 bytes seems to be the limit)
+    // Is this a limitation to expect to exist in the future permanently?
+
     /*
     var volumeTexture = device.createTexture({
         size: volumeDims,
