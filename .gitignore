@@ -4,4 +4,8 @@
 shaders/embedded_spv.js
 shaders/glb_shaders.js
 shaders/embed_marching_cubes_shaders.js
+shaders/embedded_las_shaders.js
 models/
+*.wasm
+js/liblas.js
+js/liblas_wrapper.js

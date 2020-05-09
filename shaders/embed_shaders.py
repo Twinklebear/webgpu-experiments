@@ -4,19 +4,20 @@ import sys
 import os
 import subprocess
 
-if len(sys.argv) < 2 or len(sys.argv) < 3:
-    print("Usage <glslc> <shaders...>")
+if len(sys.argv) < 3 or len(sys.argv) < 4:
+    print("Usage <glslc> <output.js> <shaders...>")
 
 glslc = sys.argv[1]
+output = sys.argv[2]
 
 try:
-    os.stat("embedded_spv.js")
-    os.remove("embedded_spv.js")
+    os.stat(output)
+    os.remove(output)
 except:
     pass
 
 compiled_shaders = ""
-for shader in sys.argv[2:]:
+for shader in sys.argv[3:]:
     fname, ext = os.path.splitext(os.path.basename(shader))
     var_name ="{}_{}_spv".format(fname, ext[1:])
     print("Embedding {} as {}".format(shader, var_name))
@@ -26,6 +27,6 @@ for shader in sys.argv[2:]:
         compiled_shaders += "const " + var_name + " = new Uint32Array([" + compiled_code[1:-2] + "]);\n"
 
 os.remove("a.spv")
-with open("embedded_spv.js", "w") as f:
+with open(output, "w") as f:
     f.write(compiled_shaders)
 
