@@ -49,17 +49,17 @@
             },
             {
                 binding: 1,
-                visibility: GPUShaderStage.VERTEX,
+                visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
                 type: "uniform-buffer"
             }
         ]
     });
     var viewParamBuf = device.createBuffer({
-        size: 16 * 4,
+        size: 20 * 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     var lasInfoBuffer = device.createBuffer({
-        size: 8 * 4,
+        size: 10 * 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
     var viewParamsBindGroup = device.createBindGroup({
@@ -80,6 +80,15 @@
         ]
     });
 
+    var lasInfoDisplay = document.getElementById("lasInfo");
+    var pointRadiusSlider = document.getElementById("pointRadius");
+    var roundPoints = document.getElementById("roundPoints");
+
+    var pointRadius = 1;
+    pointRadiusSlider.value = pointRadius;
+    var useRoundPoints = true;
+    roundPoints.checked = true;
+
     var renderPipeline = null;
 
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
@@ -99,7 +108,7 @@
 			camera.pan([cur[0] - prev[0], prev[1] - cur[1]]);
 		}
 	};
-	controller.wheel = function(amt) { camera.zoom(amt * 0.1); };
+	controller.wheel = function(amt) { camera.zoom(amt * 0.5); };
 	controller.pinch = controller.wheel;
 	controller.twoFingerDrag = function(drag) { camera.pan(drag); };
 	controller.registerForCanvas(canvas);
@@ -124,18 +133,23 @@
 
         projView = mat4.mul(projView, proj, camera.camera);
         var [upload, uploadMap] = device.createBufferMapped({
-            size: 16 * 4,
+            size: 20 * 4,
             usage: GPUBufferUsage.COPY_SRC
         });
-        new Float32Array(uploadMap).set(projView);
+        {
+            var viewmap = new Float32Array(uploadMap);
+            viewmap.set(projView);
+            viewmap.set(camera.eyePos(), 16);
+        }
         upload.unmap();
 
-        commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 16 * 4);
+        commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 20 * 4);
 
         if (newLasFile) {
             newLasFile = false;
             lasVertexBuffer = null;
             lasColorBuffer = null;
+            lasInfo.innerHTML = `LAS File with ${lasFile.numLoadedPoints} loaded points (noise classified points are discarded)`;
 
             var [buffer, mapping] = device.createBufferMapped({
                 size: lasFile.numLoadedPoints * 3 * 4,
@@ -148,6 +162,7 @@
             var vertexBuffers = [
                 {
                     arrayStride: 3 * 4,
+                    stepMode: "instance",
                     attributes: [
                         {
                             format: "float3",
@@ -164,6 +179,7 @@
                 console.log("uploading colors");
                 vertexBuffers.push({
                     arrayStride: 4,
+                    stepMode: "instance",
                     attributes: [
                         {
                             format: "uchar4norm",
@@ -202,21 +218,26 @@
 
             // Update the dataset info
             var [buffer, mapping] = device.createBufferMapped({
-                size: 6 * 4,
+                size: 10 * 4,
                 usage: GPUBufferUsage.COPY_SRC
             });
-            new Float32Array(mapping).set(lasFile.bounds);
+            {
+                var arr = new Float32Array(mapping);
+                arr.set([lasFile.bounds[0], lasFile.bounds[1], lasFile.bounds[2]]);
+                arr.set([lasFile.bounds[3], lasFile.bounds[4], lasFile.bounds[5]], 4);
+                arr.set([0.5], 8);
+                new Uint32Array(mapping).set([1], 9);
+            }
             buffer.unmap();
 
             // The UBO will pad the vec3's to vec4's anyway so we just write vec4's there
-            commandEncoder.copyBufferToBuffer(buffer, 0, lasInfoBuffer, 0, 3 * 4);
-            commandEncoder.copyBufferToBuffer(buffer, 3 * 4, lasInfoBuffer, 4 * 4, 3 * 4);
+            commandEncoder.copyBufferToBuffer(buffer, 0, lasInfoBuffer, 0, 10 * 4);
 
             renderPipeline = device.createRenderPipeline({
                 layout: device.createPipelineLayout({bindGroupLayouts: [viewParamsLayout]}),
                 vertexStage: vertexStage,
                 fragmentStage: fragmentStage,
-                primitiveTopology: "point-list",
+                primitiveTopology: "triangle-strip",
                 vertexState: {
                     vertexBuffers: vertexBuffers
                 },
@@ -232,6 +253,21 @@
             });
         }
 
+        if (pointRadiusSlider.value != pointRadius || roundPoints.checked != useRoundPoints) {
+            pointRadius = pointRadiusSlider.value;
+            useRoundPoints = roundPoints.checked;
+
+            var [buffer, mapping] = device.createBufferMapped({
+                size: 8,
+                usage: GPUBufferUsage.COPY_SRC
+            });
+            new Float32Array(mapping).set([pointRadius], 0);
+            new Uint32Array(mapping).set([useRoundPoints ? 1 : 0], 1);
+            buffer.unmap();
+
+            commandEncoder.copyBufferToBuffer(buffer, 0, lasInfoBuffer, 8 * 4, 8);
+        }
+
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
         if (lasFile && lasVertexBuffer) {
             renderPass.setPipeline(renderPipeline);
@@ -240,7 +276,7 @@
             if (lasFile.hasColors) {
                 renderPass.setVertexBuffer(1, lasColorBuffer);
             }
-            renderPass.draw(lasFile.numLoadedPoints, 1, 0, 0);
+            renderPass.draw(4, lasFile.numLoadedPoints, 0, 0);
 
         }
         renderPass.endPass();

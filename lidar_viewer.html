@@ -17,14 +17,21 @@
                 <h4>WebGPU LiDAR Viewer</h4>
                 <canvas id="webgpu-canvas" class="img-fluid" width="640" height="480"></canvas>
             </div>
-            <div class="col-8 mx-auto">
+            <div class="col-12 col-lg-8 mx-auto">
                 A LiDAR viewer which uses <a href="https://github.com/Twinklebear/LAStools.js">LASTools.js</a>
-                (libLAS compiled to WebASM) to load LAS/LAZ files, and renders them with WebGPU.
+                (libLAS compiled to WebASM) to load LAS/LAZ files, and renders them with WebGPU as instanced billboards.
+                <p id="lasInfo"></p>
             </div>
-            <div class="col-8 mx-auto">
+            <div class="col-12 col-lg-8 mx-auto">
                 <input type="file" class="custom-file-input" id="uploadLAS" accept=".las,.laz"
                        onchange="uploadLAS(this.files);">
                 <label class="custom-file-label" for="uploadLAS">Upload LAS/LAZ File</label>
+            </div>
+            <div class="col-12 col-lg-8 mx-auto">
+                <input type="checkbox" class="form-check-input" id="roundPoints">
+                <label class="form-check-label" for="roundPoints">Use round points</label>
+                <label for="pointRadius">Point Radius</label>
+                <input type="range" class="form-control-range" id="pointRadius" min="0.05" max="5.0" step="0.05">
             </div>
         </div>
     </div>
