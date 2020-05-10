@@ -20,3 +20,13 @@ which would make this easier to implement or include some other features (e.g.,
 sampling the volume, adding volume rendering),
 
 ![isosurface on the Skull data set](https://i.imgur.com/3XMumHL.png)
+
+## LiDAR Viewer
+
+A viewer for las/laz files. Uses [LASTools.js](https://github.com/Twinklebear/LAStools.js)
+to load las/laz files directly in the browser, and renders them as instanced billboard quads.
+To run this demo, download the LASTools.js release (liblas.js, liblas.wasm, liblas_wrapper.js)
+and place them under `js/`.
+
+![Morro Rock](https://i.imgur.com/j21k9Z9.png)
+

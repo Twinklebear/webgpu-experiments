@@ -96,7 +96,7 @@
     const up = vec3.set(vec3.create(), 0.0, 1.0, 0.0);
     var camera = new ArcballCamera(defaultEye, center, up, 2, [canvas.width, canvas.height]);
 	var proj = mat4.perspective(mat4.create(), 50 * Math.PI / 180.0,
-		canvas.width / canvas.height, 0.1, 1000);
+		canvas.width / canvas.height, 1, 4000);
 	var projView = mat4.create();
 
 	var controller = new Controller();
@@ -176,7 +176,6 @@
             var fragmentStage = null;
 
             if (lasFile.hasColors) {
-                console.log("uploading colors");
                 vertexBuffers.push({
                     arrayStride: 4,
                     stepMode: "instance",
