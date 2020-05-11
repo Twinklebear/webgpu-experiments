@@ -56,8 +56,6 @@ var ExclusiveScanner = function(device) {
         ]
     });
 
-    this.addBlockSumsLayout = this.scanBlocksLayout;
-
     this.scanBlocksPipeline = device.createComputePipeline({
         layout: device.createPipelineLayout({bindGroupLayouts: [this.scanBlocksLayout]}),
         computeStage: {
@@ -75,7 +73,7 @@ var ExclusiveScanner = function(device) {
     });
 
     this.addBlockSumsPipeline = device.createComputePipeline({
-        layout: device.createPipelineLayout({bindGroupLayouts: [this.addBlockSumsLayout]}),
+        layout: device.createPipelineLayout({bindGroupLayouts: [this.scanBlocksLayout]}),
         computeStage: {
             module: device.createShaderModule({code: add_block_sums_comp_spv}),
             entryPoint: "main"
@@ -177,52 +175,12 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         ]
     });
 
-    this.addBlockSumsBindGroup = this.device.createBindGroup({
-        layout: this.addBlockSumsLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: this.inputBuf,
-                    size: Math.min(this.maxScanSize * 4, this.inputSize),
-                    offset: 0,
-                }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: blockSumBuf
-                }
-            }
-        ]
-    });
-
     // Bind groups for processing the remainder if the aligned size isn't
     // an even multiple of the max scan size
     this.remainderScanBlocksBindGroup = null;
-    this.remainderAddBlockSumsBindGroup = null;
     if (this.inputSize % this.maxScanSize) {
         this.remainderScanBlocksBindGroup = this.device.createBindGroup({
             layout: this.scanBlocksLayout,
-            entries: [
-                {
-                    binding: 0,
-                    resource: {
-                        buffer: this.inputBuf,
-                        size: (this.inputSize % this.maxScanSize) * 4,
-                        offset: 0,
-                    }
-                },
-                {
-                    binding: 1,
-                    resource: {
-                        buffer: blockSumBuf
-                    }
-                }
-            ]
-        });
-        this.remainderAddBlockSumsBindGroup = this.device.createBindGroup({
-            layout: this.addBlockSumsLayout,
             entries: [
                 {
                     binding: 0,
@@ -262,10 +220,8 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         var nWorkGroups = Math.min((this.inputSize - i * this.maxScanSize) / this.blockSize, this.blockSize);
 
         var scanBlockBG = this.scanBlocksBindGroup;
-        var addBlockSumsBG = this.addBlockSumsBindGroup;
         if (nWorkGroups < this.maxScanSize / this.blockSize) {
             scanBlockBG = this.remainderScanBlocksBindGroup;
-            addBlockSumsBG = this.remainderAddBlockSumsBindGroup;
         }
 
         var computePass = commandEncoder.beginComputePass();
@@ -279,7 +235,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         computePass.dispatch(1, 1, 1);
 
         computePass.setPipeline(this.addBlockSumsPipeline);
-        computePass.setBindGroup(0, addBlockSumsBG, this.offsets, i, 1);
+        computePass.setBindGroup(0, scanBlockBG, this.offsets, i, 1);
         computePass.dispatch(nWorkGroups, 1, 1);
 
         computePass.endPass();
