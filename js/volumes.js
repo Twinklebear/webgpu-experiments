@@ -21,3 +21,7 @@ var getVolumeDimensions = function(name) {
 	return [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])];
 }
 
+var getVolumeType = function(name) {
+	var m = volumes[name].match(fileRegex);
+	return m[5];
+}

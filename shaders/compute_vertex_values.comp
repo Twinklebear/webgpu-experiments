@@ -6,7 +6,7 @@
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, std430) buffer Volume {
-    uint volume[];
+    VOLUME_DTYPE volume[];
 };
 
 layout(set = 0, binding = 1, std140) uniform VolumeInfo {
@@ -36,10 +36,22 @@ float[8] compute_vertex_values(uvec3 voxel_pos) {
     for (int i = 0; i < 8; ++i) {
         const uvec3 v = index_to_vertex[i];
 
-        const uint voxel = ((voxel_pos.z + v.z) * volume_dims.y + voxel_pos.y + v.y) * volume_dims.x
+        uint voxel = ((voxel_pos.z + v.z) * volume_dims.y + voxel_pos.y + v.y) * volume_dims.x
             + voxel_pos.x + v.x;
+#if UINT8_VOLUME == 1
+        uint subbit = (voxel % 4) * 8;
+        voxel = voxel / 4;
+        // TODO: later can change this to texelFetch when copyBufferToTexture supports 3D texture
+        values[i] = (volume[voxel] & (0x000000ff << subbit)) >> subbit;
+#elif UINT16_VOLUME == 1
+        uint subbit = (voxel % 2) * 16;
+        voxel = voxel / 2;
+        // TODO: later can change this to texelFetch when copyBufferToTexture supports 3D texture
+        values[i] = (volume[voxel] & (0x0000ffff << subbit)) >> subbit;
+#else
         // TODO: later can change this to texelFetch when copyBufferToTexture supports 3D texture
         values[i] = volume[voxel];
+#endif
     }
     return values;
 }

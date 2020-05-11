@@ -1,5 +1,5 @@
-// Volume input should be a uint8/uint32 array
-var MarchingCubes = function(device, volume, volumeDims) {
+// Volume input should be a uint8/16/32 or float32 array
+var MarchingCubes = function(device, volume, volumeDims, volumeType) {
     this.device = device;
 
     // Info buffer contains the volume dims and the isovalue
@@ -13,11 +13,37 @@ var MarchingCubes = function(device, volume, volumeDims) {
     this.volumeInfoBuffer = volumeInfoBuffer;
     this.volumeDims = volumeDims;
 
+    // Note: bytes per row has to be multiple of 256, so smaller volumes would
+    // need padding later on when using textures
     var [volumeBuffer, mapping] = device.createBufferMapped({
-        size: volume.length * 4,
+        size: volume.length * volume.BYTES_PER_ELEMENT,
         usage: GPUBufferUsage.STORAGE,
     });
-    new Uint32Array(mapping).set(volume);
+
+    var compute_active_shader = null;
+    var compute_num_verts_shader = null;
+    var compute_verts_shader = null;
+    if (volumeType == "uint8") {
+        new Uint8Array(mapping).set(volume);
+        compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint8_comp_spv});
+        compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint8_comp_spv});
+        compute_verts_shader = device.createShaderModule({code: compute_vertices_uint8_comp_spv});
+    } else if (volumeType == "uint16") {
+        new Uint16Array(mapping).set(volume);
+        compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint16_comp_spv});
+        compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint16_comp_spv});
+        compute_verts_shader = device.createShaderModule({code: compute_vertices_uint16_comp_spv});
+    } else if (volumeType == "uint32") {
+        new Uint32Array(mapping).set(volume);
+        compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint32_comp_spv});
+        compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint32_comp_spv});
+        compute_verts_shader = device.createShaderModule({code: compute_vertices_uint32_comp_spv});
+    } else if (volumeType == "float32") {
+        new Float32Array(mapping).set(volume);
+        compute_active_shader = device.createShaderModule({code: compute_active_voxel_float_comp_spv});
+        compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_float_comp_spv});
+        compute_verts_shader = device.createShaderModule({code: compute_vertices_float_comp_spv});
+    }
     volumeBuffer.unmap();
     this.volumeBuffer = volumeBuffer;
 
@@ -126,7 +152,7 @@ var MarchingCubes = function(device, volume, volumeDims) {
             bindGroupLayouts: [this.volumeDataBGLayout, this.computeActiveVoxelsBGLayout]
         }),
         computeStage: {
-            module: device.createShaderModule({code: compute_active_voxel_comp_spv}),
+            module: compute_active_shader,
             entryPoint: "main"
         }
     });
@@ -205,7 +231,7 @@ var MarchingCubes = function(device, volume, volumeDims) {
             bindGroupLayouts: [this.volumeDataBGLayout, this.computeNumVertsBGLayout]
         }),
         computeStage: {
-            module: device.createShaderModule({code: compute_num_verts_comp_spv}),
+            module: compute_num_verts_shader,
             entryPoint: "main"
         }
     });
@@ -234,7 +260,7 @@ var MarchingCubes = function(device, volume, volumeDims) {
             bindGroupLayouts: [this.volumeDataBGLayout, this.computeVertsBGLayout],
         }),
         computeStage: {
-            module: device.createShaderModule({code: compute_vertices_comp_spv}),
+            module: compute_verts_shader,
             entryPoint: "main"
         }
     });
@@ -254,11 +280,17 @@ MarchingCubes.prototype.computeSurface = async function(isovalue) {
     this.device.defaultQueue.submit([commandEncoder.finish()]);
 
     var totalActive = await this.computeActiveVoxels();
+    if (totalActive == 0) {
+        return 0;
+    }
     var activeVoxelIds = this.compactActiveVoxels(totalActive);
 
     // Note: Both compute num verts and compute verts might also need chunking
     // if the # of active voxels gets very high and exceeds what we can do in one launch
     var [totalVerts, vertexOffsetBuffer] = await this.computeNumVertices(totalActive, activeVoxelIds);
+    if (totalVerts == 0) {
+        return 0;
+    }
     this.computeVertices(totalActive, activeVoxelIds, totalVerts, vertexOffsetBuffer);
     return totalVerts;
 }
@@ -497,5 +529,16 @@ MarchingCubes.prototype.computeVertices = function(totalActive, activeVoxelIds, 
     pass.dispatch(totalActive, 1, 1);
     pass.endPass();
     this.device.defaultQueue.submit([commandEncoder.finish()]);
+}
+
+var computeValueRange = function(data) {
+    var min = Number.POSITIVE_INFINITY;
+    var max = Number.NEGATIVE_INFINITY;
+    for (var i = 0; i < data.length; ++i) {
+        min = Math.min(data[i], min);
+        max = Math.max(data[i], max);
+    }
+    console.log(`value range ${min} to ${max}`);
+    return [min, max];
 }
 

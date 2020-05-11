@@ -12,19 +12,35 @@
     });
 
     var volumeName = "Skull";
-    var volumeData = await fetch(makeVolumeURL(volumeName))
-        .then(res => res.arrayBuffer().then(arr => new Uint8Array(arr)));
-
-    // Note: bytes per row has to be multiple of 256, so smaller volumes would
-    // need padding later on when using textures
+    var volumeType = getVolumeType(volumeName);
     var volumeDims = getVolumeDimensions(volumeName);
+    var volumeData = await fetch(makeVolumeURL(volumeName))
+        .then(res => res.arrayBuffer().then(function (arr) { 
+            if (volumeType == "uint8") {
+                return new Uint8Array(arr);
+            } else if (volumeType == "uint16") {
+                return new Uint16Array(arr);
+            } else if (volumeType == "uint32") {
+                return new Uint32Array(arr);
+            } else if (volumeType == "float32") {
+                return new Float32Array(arr);
+            }
+            return null;
+        }));
+    if (volumeData == null) {
+        alert(`Unsupported volume data type ${volumeType}`);
+        return;
+    }
+
     var isovalueSlider = document.getElementById("isovalue");
-    isovalueSlider.value = 128;
+    isovalueSlider.min = 0;
+    isovalueSlider.max = 255;
+    isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
     var currentIsovalue = isovalueSlider.value;
 
     var mcInfo = document.getElementById("mcInfo");
 
-    var marchingCubes = new MarchingCubes(device, volumeData, volumeDims);
+    var marchingCubes = new MarchingCubes(device, volumeData, volumeDims, volumeType);
     var start = performance.now();
     var totalVerts = await marchingCubes.computeSurface(currentIsovalue);
     var end = performance.now();
@@ -197,11 +213,12 @@
         commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, viewParamSize);
 
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
-        renderPass.setPipeline(renderPipeline);
-        renderPass.setBindGroup(0, viewParamsBindGroup);
-        renderPass.setVertexBuffer(0, marchingCubes.vertexBuffer);
-        renderPass.draw(totalVerts, 1, 0, 0);
-
+        if (totalVerts > 0) {
+            renderPass.setPipeline(renderPipeline);
+            renderPass.setBindGroup(0, viewParamsBindGroup);
+            renderPass.setVertexBuffer(0, marchingCubes.vertexBuffer);
+            renderPass.draw(totalVerts, 1, 0, 0);
+        }
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
     }
