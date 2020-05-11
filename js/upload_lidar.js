@@ -1,5 +1,6 @@
 var lasFile = null;
-var newLasFile = false;
+var newLasFile = null;
+var newLasFileReady = false;
 
 function uploadLAS(file) {
     var reader = new FileReader();
@@ -7,13 +8,13 @@ function uploadLAS(file) {
         alert("error reading las/laz");
     }
     reader.onload = function(evt) {
-        lasFile = new LASFile(reader.result, file[0].name);
-        console.log(`Opened LAS/LAZ file '${file[0].name}' containing ${lasFile.numPoints} points`);
-        console.log(`Bounds = ${lasFile.bounds}`);
+        newLasFile = new LASFile(reader.result, file[0].name);
+        console.log(`Opened LAS/LAZ file '${file[0].name}' containing ${newLasFile.numPoints} points`);
+        console.log(`Bounds = ${newLasFile.bounds}`);
 
-        lasFile.loadPoints();
-        console.log(`Loaded ${lasFile.numLoadedPoints} (noise discarded)`);
-        newLasFile = true;
+        newLasFile.loadPoints();
+        console.log(`Loaded ${newLasFile.numLoadedPoints} (noise discarded)`);
+        newLasFileReady = true;
     }
     reader.readAsArrayBuffer(file[0]);
 }

@@ -145,8 +145,12 @@
 
         commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 20 * 4);
 
-        if (newLasFile) {
-            newLasFile = false;
+        if (newLasFileReady) {
+            if (lasFile) {
+                lasFile.close();
+            }
+            lasFile = newLasFile;
+            newLasFileReady = false;
             lasVertexBuffer = null;
             lasColorBuffer = null;
             lasInfo.innerHTML = `LAS File with ${lasFile.numLoadedPoints} loaded points (noise classified points are discarded)`;
