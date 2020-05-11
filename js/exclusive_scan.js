@@ -56,21 +56,7 @@ var ExclusiveScanner = function(device) {
         ]
     });
 
-    this.addBlockSumsLayout = device.createBindGroupLayout({
-        entries: [
-            {
-                binding: 0,
-                visibility: GPUShaderStage.COMPUTE,
-                type: "storage-buffer",
-                hasDynamicOffset: true,
-            },
-            {
-                binding: 1,
-                visibility: GPUShaderStage.COMPUTE,
-                type: "storage-buffer"
-            }
-        ]
-    });
+    this.addBlockSumsLayout = this.scanBlocksLayout;
 
     this.scanBlocksPipeline = device.createComputePipeline({
         layout: device.createPipelineLayout({bindGroupLayouts: [this.scanBlocksLayout]}),
@@ -270,7 +256,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.carryBuf, 0, 8);
     // TODO: Lingering bug on FF, seems like the buffer or scan input isn't cleared?
     if (this.dataSize < this.inputSize) {
-        commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.inputBuf, this.dataSize * 4 - 8, 8);
+        commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.inputBuf, this.dataSize * 4, 4);
     }
     for (var i = 0; i < numChunks; ++i) {
         var nWorkGroups = Math.min((this.inputSize - i * this.maxScanSize) / this.blockSize, this.blockSize);
