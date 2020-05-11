@@ -8,6 +8,7 @@ if len(sys.argv) < 2:
     print("Usage <glslc> <shaders...>")
 
 glslc = sys.argv[1]
+output = "glb_shaders.js"
 shaders = ["glb.vert", "glb.frag"]
 variants = {
     "pos": [],
@@ -18,8 +19,8 @@ variants = {
 }
 
 try:
-    os.stat("glb_shaders.js")
-    os.remove("glb_shaders.js")
+    os.stat(output)
+    os.remove(output)
 except:
     pass
 
@@ -33,11 +34,11 @@ for variant_name, defines in variants.items():
         fname, ext = os.path.splitext(os.path.basename(shader))
         var_name ="{}_{}_{}_spv".format(fname, variant_name, ext[1:])
         print("Embedding {} as {}".format(shader, var_name))
-        args = ["python3", "compile_shader.py", glslc, shader, var_name, "-O"]
+        args = ["python", "compile_shader.py", glslc, shader, var_name, "-O"]
         args.extend(defines)
         compiled_shaders += subprocess.check_output(args).decode("utf-8")
 
-with open("glb_shaders.js", "w") as f:
+with open(output, "w") as f:
     f.write(compiled_shaders)
 
 

@@ -13,6 +13,9 @@ var volumes = {
 var fileRegex = /.*\/(\w+)_(\d+)x(\d+)x(\d+)_(\w+)\.*/;
 
 var makeVolumeURL = function(name) {
+    if (name.startsWith("local")) {
+        return volumes[name];
+    }
 	return "https://www.dl.dropboxusercontent.com/s/" + volumes[name] + "?dl=1";
 }
 
