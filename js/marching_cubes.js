@@ -11,7 +11,10 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
-    var volumeName = "Skull";
+    var volumeName = "Fuel";
+    if (window.location.hash) {
+        volumeName = decodeURI(window.location.hash.substr(1));
+    }
     var volumeType = getVolumeType(volumeName);
     var volumeDims = getVolumeDimensions(volumeName);
     var volumeData = await fetch(makeVolumeURL(volumeName))
