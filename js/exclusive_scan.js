@@ -200,7 +200,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         });
     }
 
-    var numChunks = Math.ceil(this.inputSize / (this.blockSize * this.blockSize));
+    var numChunks = Math.ceil(this.inputSize / this.maxScanSize);
     this.offsets = new Uint32Array(numChunks);
     for (var i = 0; i < numChunks; ++i) {
         this.offsets.set([i * this.maxScanSize * 4], i);
