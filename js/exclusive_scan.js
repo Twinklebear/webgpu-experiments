@@ -144,7 +144,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
                 binding: 0,
                 resource: {
                     buffer: this.inputBuf,
-                    size: Math.min(this.maxScanSize * 4, this.inputSize),
+                    size: Math.min(this.maxScanSize, this.inputSize) * 4,
                     offset: 0,
                 }
             },
@@ -220,7 +220,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         var nWorkGroups = Math.min((this.inputSize - i * this.maxScanSize) / this.blockSize, this.blockSize);
 
         var scanBlockBG = this.scanBlocksBindGroup;
-        if (nWorkGroups < this.maxScanSize / this.blockSize) {
+        if (nWorkGroups < this.blockSize) {
             scanBlockBG = this.remainderScanBlocksBindGroup;
         }
 

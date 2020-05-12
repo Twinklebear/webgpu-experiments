@@ -47,6 +47,9 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
     volumeBuffer.unmap();
     this.volumeBuffer = volumeBuffer;
 
+    this.fence = device.defaultQueue.createFence();
+    this.fenceValue = 1;
+
     // TODO: Implement some upload chunking for large data (over 512*512*512 bytes seems to be the limit)
     // Is this a limitation to expect to exist in the future permanently?
 
@@ -292,6 +295,10 @@ MarchingCubes.prototype.computeSurface = async function(isovalue) {
         return 0;
     }
     this.computeVertices(totalActive, activeVoxelIds, totalVerts, vertexOffsetBuffer);
+
+    this.device.defaultQueue.signal(this.fence, this.fenceValue);
+    await this.fence.onCompletion(this.fenceValue);
+    this.fenceValue += 1;
     return totalVerts;
 }
 

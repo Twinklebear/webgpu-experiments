@@ -55,9 +55,10 @@ void main(void) {
     uint vertex_offset = vertex_offsets[gl_GlobalInvocationID.x];
     // The triangle table gives us the mapping from index to actual
     // triangles to return for this configuration
-    for (uint t = 0; tri_table[case_index][t] != -1; ++t) {
-        const uint v0 = edge_vertices[tri_table[case_index][t]][0];
-        const uint v1 = edge_vertices[tri_table[case_index][t]][1];
+    const int[16] table = tri_table[case_index];
+    for (uint t = 0; table[t] != -1; ++t) {
+        const uint v0 = edge_vertices[table[t]][0];
+        const uint v1 = edge_vertices[table[t]][1];
 
         const vec3 v = lerp_verts(index_to_vertex[v0], index_to_vertex[v1],
                 values[v0], values[v1]);
