@@ -1,3 +1,5 @@
+var requestRecompute = false;
+
 var volumes = {
     "Fuel": "7d87jcsh0qodk78/fuel_64x64x64_uint8.raw",
     "Neghip": "zgocya7h33nltu9/neghip_64x64x64_uint8.raw",
@@ -28,3 +30,8 @@ var getVolumeType = function(name) {
 	var m = volumes[name].match(fileRegex);
 	return m[5];
 }
+
+function recomputeSurface(){
+    requestRecompute = true;
+}
+
