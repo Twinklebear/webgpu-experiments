@@ -59,18 +59,33 @@
 		canvas.width / canvas.height, 0.1, 1000);
 	var projView = mat4.create();
 
+    var fpsDisplay = document.getElementById("fps");
+    var numFrames = 0;
+    var totalTimeMS = 0;
+
 	var controller = new Controller();
 	controller.mousemove = function(prev, cur, evt) {
 		if (evt.buttons == 1) {
 			camera.rotate(prev, cur);
-
+            numFrames = 0;
+            totalTimeMS = 0;
 		} else if (evt.buttons == 2) {
 			camera.pan([cur[0] - prev[0], prev[1] - cur[1]]);
+            numFrames = 0;
+            totalTimeMS = 0;
 		}
 	};
-	controller.wheel = function(amt) { camera.zoom(amt * 0.5); };
+	controller.wheel = function(amt) {
+        camera.zoom(amt * 0.5);
+        numFrames = 0;
+        totalTimeMS = 0;
+    };
 	controller.pinch = controller.wheel;
-	controller.twoFingerDrag = function(drag) { camera.pan(drag); };
+	controller.twoFingerDrag = function(drag) {
+        camera.pan(drag);
+        numFrames = 0;
+        totalTimeMS = 0;
+    };
 	controller.registerForCanvas(canvas);
 
     var swapChainFormat = "bgra8unorm";
@@ -187,8 +202,12 @@
 
     requestAnimationFrame(animationFrame);
 
+    var fence = device.defaultQueue.createFence();
+    var fenceValue = 1;
+
     while (true) {
         await animationFrame();
+        var start = performance.now();
 
         if (isovalueSlider.value != currentIsovalue || requestRecompute) {
             currentIsovalue = isovalueSlider.value;
@@ -198,6 +217,8 @@
             console.log(`Computation took ${end - start}ms`);
             mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms. Isovalue = ${currentIsovalue}`;
             requestRecompute = false;
+            numFrames = 0;
+            totalTimeMS = 0;
         }
 
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
@@ -225,6 +246,15 @@
         }
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
+
+        // Measure render time by waiting for the fence
+        device.defaultQueue.signal(fence, fenceValue);
+        await fence.onCompletion(fenceValue);
+        fenceValue += 1;
+        var end = performance.now();
+        numFrames += 1;
+        totalTimeMS += end - start;
+        fpsDisplay.innerHTML = `Avg. FPS ${Math.round(1000.0 * numFrames / totalTimeMS)}`;
     }
 })();
 
