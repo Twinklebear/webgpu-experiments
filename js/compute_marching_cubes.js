@@ -433,13 +433,15 @@ MarchingCubes.prototype.compactActiveVoxels = function(totalActive) {
         var numWorkGroups = Math.min(voxelsToProcess - i * this.maxDispatchSize, this.maxDispatchSize);
         var offset = i * this.maxDispatchSize * 4;
         if (numWorkGroups == this.maxDispatchSize) {
-            // These are supposed to be passed in REVERSE order of how they appear in the bindgroup layout!??
-            // This seems like a bug, the spec says it should be passed in increasing order of
-            // binding number https://gpuweb.github.io/gpuweb/#bind-group-layout-creation
-            // so I'd think this should be [offset, offset, i * 256]?
             pass.setBindGroup(0, streamCompactBG, [i * 256, offset, offset]);
+            // TODO: When Chrome Canary gets the Dawn bugfix added, switch to pass it in right order
+            // https://bugs.chromium.org/p/dawn/issues/detail?id=408
+            //pass.setBindGroup(0, streamCompactBG, [offset, offset, i * 256]);
         } else {
+            // TODO: When Chrome Canary gets the Dawn bugfix added, switch to pass it in right order
+            // https://bugs.chromium.org/p/dawn/issues/detail?id=408
             pass.setBindGroup(0, streamCompactRemainderBG, [i * 256, offset, offset]);
+            //pass.setBindGroup(0, streamCompactRemainderBG, [offset, offset, i * 256]);
         }
         pass.dispatch(numWorkGroups, 1, 1);
     }
