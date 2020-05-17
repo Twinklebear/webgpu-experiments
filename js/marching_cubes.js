@@ -11,9 +11,24 @@
         usage: GPUTextureUsage.OUTPUT_ATTACHMENT
     });
 
+    var isovalueSlider = document.getElementById("isovalue");
+    isovalueSlider.min = 0;
+    isovalueSlider.max = 255;
+    isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
+    var currentIsovalue = isovalueSlider.value;
+
     var volumeName = "Fuel";
     if (window.location.hash) {
-        volumeName = decodeURI(window.location.hash.substr(1));
+        var urlParams = window.location.hash.substr(1).split("&");
+        for (var i = 0; i < urlParams.length; ++i) {
+            var str = decodeURI(urlParams[i]);
+            if (str.startsWith("vol=")) {
+                volumeName = str.substr(4);
+            } else if (str.startsWith("iso=")) {
+                isovalueSlider.value = parseFloat(str.substr(4));
+                currentIsovalue = isovalueSlider.value;
+            }
+        }
     }
     var volumeType = getVolumeType(volumeName);
     var volumeDims = getVolumeDimensions(volumeName);
@@ -34,12 +49,6 @@
         alert(`Unsupported volume data type ${volumeType}`);
         return;
     }
-
-    var isovalueSlider = document.getElementById("isovalue");
-    isovalueSlider.min = 0;
-    isovalueSlider.max = 255;
-    isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
-    var currentIsovalue = isovalueSlider.value;
 
     var mcInfo = document.getElementById("mcInfo");
 
