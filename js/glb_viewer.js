@@ -8,7 +8,6 @@
     var device = await adapter.requestDevice();
 
     //var glbFile = await fetch("/models/2CylinderEngine.glb")
-    //var glbFile = await fetch("/models/suzanne_texture.glb")
     //var glbFile = await fetch("/models/FlightHelmet.glb")
     var glbFile = await fetch("/models/sponza.glb")
     //var glbFile = await fetch("/models/san-miguel.glb")

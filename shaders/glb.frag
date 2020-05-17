@@ -30,6 +30,7 @@ float linear_to_srgb(float x) {
 
 void main(void) {
     color = vec4(base_color_factor.xyz, 1);
+
     /*
 #ifdef NORMAL_ATTRIB
     color = vec4(0.5 * (vnormal + 1.0), 1.0);
@@ -46,8 +47,13 @@ void main(void) {
     color = vec4(base_color_factor.xyz * texture_color.xyz, 1);
 #endif
 
+    // TODO: Not sure why this srgb correction is now returning black
+    // and can't repro on the triangle example
+    /*
     color.x = linear_to_srgb(color.x);
     color.y = linear_to_srgb(color.y);
     color.z = linear_to_srgb(color.z);
+    color.w = 1;
+    */
 }
 
