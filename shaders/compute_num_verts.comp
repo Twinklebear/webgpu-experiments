@@ -25,23 +25,20 @@ void main(void) {
         }
     }
 
-	uint nverts = 0;
-	// The triangle table gives us the mapping from index to actual
-	// triangles to return for this configuration
-    const uint base_index = case_index * 4;
-    const int table[16] = {
-        tri_table[base_index][0], tri_table[base_index][1],
-        tri_table[base_index][2], tri_table[base_index][3],
-        tri_table[base_index + 1][0], tri_table[base_index + 1][1],
-        tri_table[base_index + 1][2], tri_table[base_index + 1][3],
-        tri_table[base_index + 2][0], tri_table[base_index + 2][1],
-        tri_table[base_index + 2][2], tri_table[base_index + 2][3],
-        tri_table[base_index + 3][0], tri_table[base_index + 3][1],
-        tri_table[base_index + 3][2], tri_table[base_index + 3][3]
-    };
-	for (uint t = 0; table[t] != -1; ++t) {
-		++nverts;
-	}
-	num_verts[gl_GlobalInvocationID.x] = nverts;
+    uint nverts = 0;
+    // The triangle table gives us the mapping from index to actual
+    // triangles to return for this configuration
+    uint chunk = case_index * 4;
+    ivec4 table_chunk = tri_table[chunk];
+    for (uint t = 0; table_chunk[t] != -1;) {
+        ++nverts;
+        if (t == 3) {
+            table_chunk = tri_table[++chunk];
+            t = 0;
+        } else {
+            ++t;
+        }
+    }
+    num_verts[gl_GlobalInvocationID.x] = nverts;
 }
 
