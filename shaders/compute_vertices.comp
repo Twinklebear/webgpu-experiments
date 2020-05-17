@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "tri_table.glsl"
+#include "compute_vertex_values.comp"
 
 const int[12][2] edge_vertices = {
     {0, 1},
@@ -29,6 +29,11 @@ layout(set = 1, binding = 2, std430) buffer Vertices {
     vec4 verts[];
 };
 
+layout(set = 1, binding = 3, std140) uniform TriTable {
+    // Stride alignment rules: need to pack each into 4 ivec4's
+    ivec4 tri_table[256 * 4];
+};
+
 vec3 lerp_verts(const ivec3 va, const ivec3 vb, const float fa, const float fb) {
     float t = 0;
     if (abs(fa - fb) < 0.001) {
@@ -55,8 +60,18 @@ void main(void) {
     uint vertex_offset = vertex_offsets[gl_GlobalInvocationID.x];
     // The triangle table gives us the mapping from index to actual
     // triangles to return for this configuration
-    const int[16] table = tri_table[case_index];
-    for (uint t = 0; table[t] != -1; ++t) {
+    const uint base_index = case_index * 4;
+    const int table[16] = {
+        tri_table[base_index][0], tri_table[base_index][1],
+        tri_table[base_index][2], tri_table[base_index][3],
+        tri_table[base_index + 1][0], tri_table[base_index + 1][1],
+        tri_table[base_index + 1][2], tri_table[base_index + 1][3],
+        tri_table[base_index + 2][0], tri_table[base_index + 2][1],
+        tri_table[base_index + 2][2], tri_table[base_index + 2][3],
+        tri_table[base_index + 3][0], tri_table[base_index + 3][1],
+        tri_table[base_index + 3][2], tri_table[base_index + 3][3]
+    };
+	for (uint t = 0; table[t] != -1; ++t) {
         const uint v0 = edge_vertices[table[t]][0];
         const uint v1 = edge_vertices[table[t]][1];
 
@@ -70,5 +85,4 @@ void main(void) {
                 1.0);
     }
 }
-
 

@@ -47,6 +47,14 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
     volumeBuffer.unmap();
     this.volumeBuffer = volumeBuffer;
 
+    var [triTableBuf, mapping] = device.createBufferMapped({
+        size: triTable.byteLength,
+        usage: GPUBufferUsage.UNIFORM
+    });
+    new Int32Array(mapping).set(triTable);
+    triTableBuf.unmap();
+    this.triTable = triTableBuf;
+
     this.fence = device.defaultQueue.createFence();
     this.fenceValue = 1;
 
@@ -226,6 +234,11 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
                 binding: 1,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer"
+            },
+            {
+                binding: 2,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "uniform-buffer"
             }
         ]
     });
@@ -255,6 +268,11 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
                 binding: 2,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer"
+            },
+            {
+                binding: 3,
+                visibility: GPUShaderStage.COMPUTE,
+                type: "uniform-buffer"
             }
         ]
     });
@@ -474,6 +492,12 @@ MarchingCubes.prototype.computeNumVertices = async function(totalActive, activeV
                 resource: {
                     buffer: numVertsBuffer
                 }
+            },
+            {
+                binding: 2,
+                resource: {
+                    buffer: this.triTable
+                }
             }
         ]
     });
@@ -525,6 +549,12 @@ MarchingCubes.prototype.computeVertices = function(totalActive, activeVoxelIds, 
                 binding: 2,
                 resource: {
                     buffer: this.vertexBuffer
+                }
+            },
+            {
+                binding: 3,
+                resource: {
+                    buffer: this.triTable
                 }
             }
         ]
