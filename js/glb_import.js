@@ -550,3 +550,178 @@ var GLTFTexture = function(sampler, image) {
     this.imageView = image.createView();
 }
 
+class GLBModel {
+    constructor(nodes) {
+        this.nodes = nodes;
+    }
+
+    buildRenderBundles(device, shaderModules, viewParamsLayout, viewParamsBindGroup, swapChainFormat) {
+        var renderBundles = [];
+        for (var i = 0; i < this.nodes.length; ++i) {
+            var n = this.nodes[i];
+            var bundle = n.buildRenderBundle(device, shaderModules, viewParamsLayout, viewParamsBindGroup,
+                swapChainFormat, "depth24plus-stencil8");
+            renderBundles.push(bundle);
+        }
+        return renderBundles;
+    }
+};
+
+// Upload a GLB model and return it
+var uploadGLBModel = async function(buffer, device) {
+    // The file header and chunk 0 header
+    // TODO: It sounds like the spec does allow for multiple binary chunks,
+    // so then how do you know which chunk a buffer exists in? Maybe the buffer id
+    // corresponds to the binary chunk ID? Would have to find info in the spec
+    // or an example file to check this
+    var header = new Uint32Array(buffer, 0, 5);
+    if (header[0] != 0x46546C67) {
+        alert("This does not appear to be a glb file?");
+        return;
+    }
+    console.log(`GLB Version ${header[1]}, file length ${header[2]}`);
+    console.log(`JSON chunk length ${header[3]}, type ${header[4]}`);
+    var glbJsonData = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(buffer, 20, header[3])));
+    console.log(glbJsonData);
+
+    var binaryHeader = new Uint32Array(buffer, 20 + header[3], 2);
+    var glbBuffer = new GLTFBuffer(buffer, binaryHeader[0], 28 + header[3]);
+
+    if (28 + header[3] + binaryHeader[0] != buffer.byteLength) {
+        console.log("TODO: Multiple binary chunks in file");
+    }
+
+    // TODO: Later could look at merging buffers and actually using the starting offsets,
+    // but want to avoid uploading the entire buffer since it may contain packed images 
+    var bufferViews = []
+    for (var i = 0; i < glbJsonData.bufferViews.length; ++i) {
+        bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
+    }
+
+    var images = [];
+    if (glbJsonData["images"] !== undefined) {
+        for (var i = 0; i < glbJsonData["images"].length; ++i) {
+            var imgJson = glbJsonData["images"][i];
+            var imageView = new GLTFBufferView(glbBuffer, glbJsonData["bufferViews"][imgJson["bufferView"]]);
+            var imgBlob = new Blob([imageView.buffer], {type: imgJson["mime/type"]});
+            var img = await createImageBitmap(imgBlob);
+
+            // TODO: For glTF we need to look at where an image is used to know if
+            // it should be srgb or not. We basically need to pass through the material list
+            // and find if the texture which uses this image is used by a metallic/roughness param
+            var gpuImg = device.createTexture({
+                size: [img.width, img.height, 1],
+                format: "rgba8unorm-srgb",
+                usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
+            });
+
+            var copySrc = {
+                imageBitmap: img
+            };
+            var copyDst = {
+                texture: gpuImg
+            };
+            device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
+
+            images.push(gpuImg);
+        }
+    }
+
+    var defaultSampler = new GLTFSampler({}, device);
+    var samplers = [];
+    if (glbJsonData["samplers"] !== undefined) {
+        for (var i = 0; i < glbJsonData["samplers"].length; ++i) {
+            samplers.push(new GLTFSampler(glbJsonData["samplers"][i], device));
+        }
+    }
+
+    var textures = [];
+    if (glbJsonData["textures"] !== undefined) {
+        for (var i = 0; i < glbJsonData["textures"].length; ++i) {
+            var tex = glbJsonData["textures"][i];
+            var sampler = tex["sampler"] !== undefined ? samplers[tex["sampler"]] : defaultSampler;
+            textures.push(new GLTFTexture(sampler, images[tex["source"]]));
+        }
+    }
+
+    var defaultMaterial = new GLTFMaterial({});
+    var materials = [];
+    for (var i = 0; i < glbJsonData["materials"].length; ++i) {
+        materials.push(new GLTFMaterial(glbJsonData["materials"][i], textures));
+    }
+
+    var meshes = [];
+    for (var i = 0; i < glbJsonData.meshes.length; ++i) {
+        var mesh = glbJsonData.meshes[i];
+
+        var primitives = []
+        for (var j = 0; j < mesh.primitives.length; ++j) {
+            var prim = mesh.primitives[j];
+            if (prim["mode"] != undefined && prim["mode"] != 4) {
+                alert("Ignoring primitive with unsupported mode " + prim["mode"]);
+                continue;
+            }
+
+            var indices = null;
+            if (glbJsonData["accessors"][prim["indices"]] !== undefined) {
+                var accessor = glbJsonData["accessors"][prim["indices"]];
+                var viewID = accessor["bufferView"];
+                bufferViews[viewID].needsUpload = true;
+                bufferViews[viewID].addUsage(GPUBufferUsage.INDEX);
+                indices = new GLTFAccessor(bufferViews[viewID], accessor);
+            }
+
+            var positions = null;
+            var normals = null;
+            var texcoords = [];
+            for (var attr in prim["attributes"]){
+                var accessor = glbJsonData["accessors"][prim["attributes"][attr]];
+                var viewID = accessor["bufferView"];
+                bufferViews[viewID].needsUpload = true;
+                bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
+                if (attr == "POSITION") {
+                    positions = new GLTFAccessor(bufferViews[viewID], accessor);
+                } else if (attr == "NORMAL") {
+                    normals = new GLTFAccessor(bufferViews[viewID], accessor);
+                } else if (attr.startsWith("TEXCOORD")) {
+                    texcoords.push(new GLTFAccessor(bufferViews[viewID], accessor));
+                }
+            }
+
+            var material = null;
+            if (prim["material"] !== undefined) {
+                material = materials[prim["material"]];
+            } else {
+                material = defaultMaterial;
+            }
+
+            var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords, material);
+            primitives.push(gltfPrim);
+        }
+        meshes.push(new GLTFMesh(mesh["name"], primitives));
+    }
+
+    // Upload the different views used by meshes
+    for (var i = 0; i < bufferViews.length; ++i) {
+        if (bufferViews[i].needsUpload) {
+            bufferViews[i].upload(device);
+        }
+    }
+
+    defaultMaterial.upload(device);
+    for (var i = 0; i < materials.length; ++i) {
+        materials[i].upload(device);
+    }
+
+    var nodes = []
+    var gltfNodes = makeGLTFSingleLevel(glbJsonData["nodes"]);
+    for (var i = 0; i < gltfNodes.length; ++i) {
+        var n = gltfNodes[i];
+        if (n["mesh"] !== undefined) {
+            var node = new GLTFNode(n["name"], meshes[n["mesh"]], readNodeTransform(n));
+            node.upload(device);
+            nodes.push(node);
+        }
+    }
+    return new GLBModel(nodes);
+}

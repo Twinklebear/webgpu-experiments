@@ -9,168 +9,11 @@
 
     //var glbFile = await fetch("/models/2CylinderEngine.glb")
     //var glbFile = await fetch("/models/FlightHelmet.glb")
-    var glbFile = await fetch("/models/sponza.glb")
+    //var glbFile = await fetch("/models/sponza.glb")
     //var glbFile = await fetch("/models/san-miguel.glb")
     //var glbFile = await fetch("/models/DamagedHelmet.glb")
-        .then(res => res.arrayBuffer());
-
-    // The file header and chunk 0 header
-    // TODO: It sounds like the spec does allow for multiple binary chunks,
-    // so then how do you know which chunk a buffer exists in? Maybe the buffer id
-    // corresponds to the binary chunk ID? Would have to find info in the spec
-    // or an example file to check this
-    var header = new Uint32Array(glbFile, 0, 5);
-    if (header[0] != 0x46546C67) {
-        alert("This does not appear to be a glb file?");
-        return;
-    }
-    console.log(`GLB Version ${header[1]}, file length ${header[2]}`);
-    console.log(`JSON chunk length ${header[3]}, type ${header[4]}`);
-    var glbJsonData = JSON.parse(new TextDecoder("utf-8").decode(new Uint8Array(glbFile, 20, header[3])));
-    console.log(glbJsonData);
-
-    var binaryHeader = new Uint32Array(glbFile, 20 + header[3], 2);
-    var glbBuffer = new GLTFBuffer(glbFile, binaryHeader[0], 28 + header[3]);
-
-    if (28 + header[3] + binaryHeader[0] != glbFile.byteLength) {
-        console.log("TODO: Multiple binary chunks in file");
-    }
-
-    // TODO: Later could look at merging buffers and actually using the starting offsets,
-    // but want to avoid uploading the entire buffer since it may contain packed images 
-    var bufferViews = []
-    for (var i = 0; i < glbJsonData.bufferViews.length; ++i) {
-        bufferViews.push(new GLTFBufferView(glbBuffer, glbJsonData.bufferViews[i]));
-    }
-
-    var images = [];
-    if (glbJsonData["images"] !== undefined) {
-        for (var i = 0; i < glbJsonData["images"].length; ++i) {
-            var imgJson = glbJsonData["images"][i];
-            var imageView = new GLTFBufferView(glbBuffer, glbJsonData["bufferViews"][imgJson["bufferView"]]);
-            var imgBlob = new Blob([imageView.buffer], {type: imgJson["mime/type"]});
-            var img = await createImageBitmap(imgBlob);
-
-            // TODO: For glTF we need to look at where an image is used to know if
-            // it should be srgb or not. We basically need to pass through the material list
-            // and find if the texture which uses this image is used by a metallic/roughness param
-            var gpuImg = device.createTexture({
-                size: [img.width, img.height, 1],
-                format: "rgba8unorm-srgb",
-                usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
-            });
-
-            var copySrc = {
-                imageBitmap: img
-            };
-            var copyDst = {
-                texture: gpuImg
-            };
-            device.defaultQueue.copyImageBitmapToTexture(copySrc, copyDst, [img.width, img.height, 1]);
-
-            images.push(gpuImg);
-        }
-    }
-
-    var defaultSampler = new GLTFSampler({}, device);
-    var samplers = [];
-    if (glbJsonData["samplers"] !== undefined) {
-        for (var i = 0; i < glbJsonData["samplers"].length; ++i) {
-            samplers.push(new GLTFSampler(glbJsonData["samplers"][i], device));
-        }
-    }
-
-    var textures = [];
-    if (glbJsonData["textures"] !== undefined) {
-        for (var i = 0; i < glbJsonData["textures"].length; ++i) {
-            var tex = glbJsonData["textures"][i];
-            var sampler = tex["sampler"] !== undefined ? samplers[tex["sampler"]] : defaultSampler;
-            textures.push(new GLTFTexture(sampler, images[tex["source"]]));
-        }
-    }
-
-    var defaultMaterial = new GLTFMaterial({});
-    var materials = [];
-    for (var i = 0; i < glbJsonData["materials"].length; ++i) {
-        materials.push(new GLTFMaterial(glbJsonData["materials"][i], textures));
-    }
-    console.log(materials);
-
-    var meshes = [];
-    for (var i = 0; i < glbJsonData.meshes.length; ++i) {
-        var mesh = glbJsonData.meshes[i];
-
-        var primitives = []
-        for (var j = 0; j < mesh.primitives.length; ++j) {
-            var prim = mesh.primitives[j];
-            if (prim["mode"] != undefined && prim["mode"] != 4) {
-                alert("Ignoring primitive with unsupported mode " + prim["mode"]);
-                continue;
-            }
-
-            var indices = null;
-            if (glbJsonData["accessors"][prim["indices"]] !== undefined) {
-                var accessor = glbJsonData["accessors"][prim["indices"]];
-                var viewID = accessor["bufferView"];
-                bufferViews[viewID].needsUpload = true;
-                bufferViews[viewID].addUsage(GPUBufferUsage.INDEX);
-                indices = new GLTFAccessor(bufferViews[viewID], accessor);
-            }
-
-            var positions = null;
-            var normals = null;
-            var texcoords = [];
-            for (var attr in prim["attributes"]){
-                var accessor = glbJsonData["accessors"][prim["attributes"][attr]];
-                var viewID = accessor["bufferView"];
-                bufferViews[viewID].needsUpload = true;
-                bufferViews[viewID].addUsage(GPUBufferUsage.VERTEX);
-                if (attr == "POSITION") {
-                    positions = new GLTFAccessor(bufferViews[viewID], accessor);
-                } else if (attr == "NORMAL") {
-                    normals = new GLTFAccessor(bufferViews[viewID], accessor);
-                } else if (attr.startsWith("TEXCOORD")) {
-                    texcoords.push(new GLTFAccessor(bufferViews[viewID], accessor));
-                }
-            }
-
-            var material = null;
-            if (prim["material"] !== undefined) {
-                material = materials[prim["material"]];
-            } else {
-                material = defaultMaterial;
-            }
-
-            var gltfPrim = new GLTFPrimitive(indices, positions, normals, texcoords, material);
-            primitives.push(gltfPrim);
-        }
-        meshes.push(new GLTFMesh(mesh["name"], primitives));
-    }
-    console.log(meshes);
-
-    // Upload the different views used by meshes
-    for (var i = 0; i < bufferViews.length; ++i) {
-        if (bufferViews[i].needsUpload) {
-            bufferViews[i].upload(device);
-        }
-    }
-
-    defaultMaterial.upload(device);
-    for (var i = 0; i < materials.length; ++i) {
-        materials[i].upload(device);
-    }
-
-    var nodes = []
-    var gltfNodes = makeGLTFSingleLevel(glbJsonData["nodes"]);
-    for (var i = 0; i < gltfNodes.length; ++i) {
-        var n = gltfNodes[i];
-        if (n["mesh"] !== undefined) {
-            var node = new GLTFNode(n["name"], meshes[n["mesh"]], readNodeTransform(n));
-            node.upload(device);
-            nodes.push(node);
-        }
-    }
-    console.log(nodes);
+    var glbFile = await fetch("https://www.dl.dropboxusercontent.com/s/7ndj8pfjhact7lz/DamagedHelmet.glb?dl=1")
+        .then(res => res.arrayBuffer().then(buf => uploadGLBModel(buf, device)));
 
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
@@ -279,13 +122,8 @@
         ]
     });
 
-    var renderBundles = [];
-    for (var i = 0; i < nodes.length; ++i) {
-        var n = nodes[i];
-        var bundle = n.buildRenderBundle(device, shaderModules, viewParamsLayout, viewParamsBindGroup,
-            swapChainFormat, "depth24plus-stencil8");
-        renderBundles.push(bundle);
-    }
+    var renderBundles = glbFile.buildRenderBundles(device, shaderModules, viewParamsLayout,
+        viewParamsBindGroup, swapChainFormat);
 
     const defaultEye = vec3.set(vec3.create(), 0.0, 0.0, 1.0);
     const center = vec3.set(vec3.create(), 0.0, 0.0, 0.0);
@@ -309,7 +147,29 @@
 	controller.twoFingerDrag = function(drag) { camera.pan(drag); };
 	controller.registerForCanvas(canvas);
 
-    var frame = function() {
+    var animationFrame = function() {
+        var resolve = null;
+        var promise = new Promise(r => resolve = r);
+        window.requestAnimationFrame(resolve);
+        return promise
+    };
+    requestAnimationFrame(animationFrame);
+
+    var fpsDisplay = document.getElementById("fps");
+    var fence = device.defaultQueue.createFence();
+    var fenceValue = 1;
+    numFrames = 0;
+    totalTimeMS = 0;
+    while (true) {
+        await animationFrame();
+        if (glbBuffer != null) {
+            glbFile = await uploadGLBModel(glbBuffer, device);
+            renderBundles = glbFile.buildRenderBundles(device, shaderModules, viewParamsLayout,
+                viewParamsBindGroup, swapChainFormat);
+            glbBuffer = null;
+        }
+
+        var start = performance.now();
         renderPassDesc.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
 
         var commandEncoder = device.createCommandEncoder();
@@ -330,8 +190,13 @@
         renderPass.endPass();
         device.defaultQueue.submit([commandEncoder.finish()]);
 
-        requestAnimationFrame(frame);
+        device.defaultQueue.signal(fence, fenceValue);
+        await fence.onCompletion(fenceValue);
+        fenceValue += 1;
+        var end = performance.now();
+        numFrames += 1;
+        totalTimeMS += end - start;
+        fpsDisplay.innerHTML = `Avg. FPS ${Math.round(1000.0 * numFrames / totalTimeMS)}`;
     }
-    requestAnimationFrame(frame);
 })();
 

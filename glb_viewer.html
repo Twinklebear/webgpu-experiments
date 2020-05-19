@@ -19,12 +19,19 @@
             </div>
             <div class="col-12 text-center">
                 Demo of a glTF renderer using WebGPU. Supports loading binary glTF files only.
+                <p id="fps"></p>
+            </div>
+            <div class="col-12 col-lg-8 mx-auto">
+                <input type="file" class="custom-file-input" id="uploadGLB" accept=".glb"
+                       onchange="uploadGLB(this.files);">
+                <label class="custom-file-label" for="uploadGLB">Upload GLB File</label>
             </div>
         </div>
     </div>
     <script src="shaders/glb_shaders.js"></script>
     <script src="js/gl-matrix-min.js"></script>
     <script src="js/webgl-util.js"></script>
+    <script src="js/upload_glb.js"></script>
     <script src="js/glb_import.js"></script>
     <script src="js/glb_viewer.js"></script>
 </body>

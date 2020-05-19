@@ -47,8 +47,8 @@ void main(void) {
     color = vec4(base_color_factor.xyz * texture_color.xyz, 1);
 #endif
 
-    // TODO: Not sure why this srgb correction is now returning black
-    // and can't repro on the triangle example
+    // TODO: This looks to be a bug in Dawn's SPV -> DXC translation backend?
+    // I don't have this issue on Mac with linear_to_srgb
     /*
     color.x = linear_to_srgb(color.x);
     color.y = linear_to_srgb(color.y);
