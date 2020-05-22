@@ -137,6 +137,12 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     carryBuf.unmap();
     this.carryBuf = carryBuf;
 
+    // Can't copy from a buffer to itself so we need an intermediate to move the carry
+    this.carryIntermediateBuf = this.device.createBuffer({
+        size: 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+
     this.scanBlocksBindGroup = this.device.createBindGroup({
         layout: this.scanBlocksLayout,
         entries: [
@@ -241,7 +247,8 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         computePass.endPass();
 
         // Update the carry in value for the next chunk, copy carry out to carry in
-        commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.carryBuf, 0, 4);
+        commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.carryIntermediateBuf, 0, 4);
+        commandEncoder.copyBufferToBuffer(this.carryIntermediateBuf, 0, this.carryBuf, 0, 4);
     }
     // Readback the the last element to return the total sum as well
     if (this.dataSize < this.inputSize) {
