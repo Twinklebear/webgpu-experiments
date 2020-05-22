@@ -532,7 +532,6 @@ MarchingCubes.prototype.computeNumVertices = async function(totalActive, activeV
 MarchingCubes.prototype.computeVertices = function(totalActive, activeVoxelIds, totalVerts, vertexOffsetBuffer) {
     // Compute the vertices and output them along with the rendering command
     // We just write vec4's for positions to have an easier std430 layout
-    // TODO: Don't re-allocate if our old one has enough room to hold the new surface
     if (totalVerts > this.totalVerts) {
         this.vertexBuffer = this.device.createBuffer({
             size: totalVerts * 4 * 4,
