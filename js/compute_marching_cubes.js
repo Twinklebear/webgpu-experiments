@@ -457,15 +457,9 @@ MarchingCubes.prototype.compactActiveVoxels = function(totalActive) {
         var numWorkGroups = Math.min(voxelsToProcess - i * this.maxDispatchSize, this.maxDispatchSize);
         var offset = i * this.maxDispatchSize * 4;
         if (numWorkGroups == this.maxDispatchSize) {
-            pass.setBindGroup(0, streamCompactBG, [i * 256, offset, offset]);
-            // TODO: When Chrome Canary gets the Dawn bugfix added, switch to pass it in right order
-            // https://bugs.chromium.org/p/dawn/issues/detail?id=408
-            //pass.setBindGroup(0, streamCompactBG, [offset, offset, i * 256]);
+            pass.setBindGroup(0, streamCompactBG, [offset, offset, i * 256]);
         } else {
-            // TODO: When Chrome Canary gets the Dawn bugfix added, switch to pass it in right order
-            // https://bugs.chromium.org/p/dawn/issues/detail?id=408
-            pass.setBindGroup(0, streamCompactRemainderBG, [i * 256, offset, offset]);
-            //pass.setBindGroup(0, streamCompactRemainderBG, [offset, offset, i * 256]);
+            pass.setBindGroup(0, streamCompactRemainderBG, [offset, offset, i * 256]);
         }
         pass.dispatch(numWorkGroups, 1, 1);
     }
