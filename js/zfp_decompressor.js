@@ -40,7 +40,7 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
     const paddedDims = [alignTo(volumeDims[0], 4), alignTo(volumeDims[1], 4), alignTo(volumeDims[2], 4)]
     const totalBlocks = (paddedDims[0] * paddedDims[1] * paddedDims[2]) / 64;
     console.log(`total blocks ${totalBlocks}`);
-    const groupThreadCount = 128; 
+    const groupThreadCount = 32; 
     const numWorkGroups = Math.ceil(totalBlocks / groupThreadCount);
     console.log(`num work groups ${numWorkGroups}`);
 
