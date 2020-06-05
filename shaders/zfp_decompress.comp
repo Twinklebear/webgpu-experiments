@@ -288,7 +288,7 @@ void decode_ints(inout BlockReader reader,
         }
 
         // Deposit the bit plane
-        for (uint i = 0; i < ZFP_BLOCK_SIZE; ++i, x = shift_right(x, 1)) {  // x >>= 1) {
+        for (uint i = 0; i < ZFP_BLOCK_SIZE; ++i, x = shift_right(x, 1)) {
             block[i] += (x.lo & 1) << k;
         }
     }

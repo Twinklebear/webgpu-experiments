@@ -11,15 +11,11 @@
 
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
-    var swapChainFormat = "bgra8unorm";
-    var swapChain = context.configureSwapChain({
-        device: device,
-        format: swapChainFormat,
-        usage: GPUTextureUsage.OUTPUT_ATTACHMENT
-    });
 
+    var compressionRate = 4;
+    var baseVolumeName = "magnetic_reconnection_512x512x512_float32.raw";
     //var baseVolumeName = "skull_256x256x256_uint8.raw";
-    var baseVolumeName = "fuel_64x64x64_uint8.raw";
+    //var baseVolumeName = "fuel_64x64x64_uint8.raw";
     var volumeDims = getVolumeDimensions(baseVolumeName);
     var zfpDataName = baseVolumeName + ".zfp";
     var expectDataName = baseVolumeName + ".expect_decomp";
@@ -38,12 +34,8 @@
         return;
     }
 
-    var maxBits = 4;
     var decompressor = new ZFPDecompressor(device);
-    var start = performance.now();
-    var decompressed = await decompressor.decompress(compressedData, maxBits, volumeDims);
-    var end = performance.now();
-    console.log(`Decompressed ${decompressed.byteLength} in ${end - start}ms = ${0.001 * decompressed.byteLength / (end - start)} MB/s`);
+    var decompressed = await decompressor.decompress(compressedData, compressionRate, volumeDims);
 
     // Verify we decompressed the data correctly
     var matched = true;

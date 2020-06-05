@@ -36,7 +36,7 @@ var ZFPDecompressor = function(device) {
     });
 }
 
-ZFPDecompressor.prototype.decompress = async function(compressedInput, maxBits, volumeDims) {
+ZFPDecompressor.prototype.decompress = async function(compressedInput, compressionRate, volumeDims) {
     const paddedDims = [alignTo(volumeDims[0], 4), alignTo(volumeDims[1], 4), alignTo(volumeDims[2], 4)]
     const totalBlocks = (paddedDims[0] * paddedDims[1] * paddedDims[2]) / 64;
     console.log(`total blocks ${totalBlocks}`);
@@ -49,6 +49,7 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, maxBits, 
         usage: GPUBufferUsage.UNIFORM
     });
     {
+        var maxBits = (1 << (2 * 3)) * compressionRate;
         var buf = new Uint32Array(mapping);
         buf.set(volumeDims)
         buf.set(paddedDims, 4);
@@ -98,12 +99,27 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, maxBits, 
         ]
     });
 
-    var commandEncoder = this.device.createCommandEncoder();
-    var pass = commandEncoder.beginComputePass();
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.dispatch(numWorkGroups, 1, 1);
-    pass.endPass();
+    var fence = this.device.defaultQueue.createFence();
+    var fenceValue = 1;
+
+    for (var i = 0; i < 10; ++i) {
+        var start = performance.now();
+        var commandEncoder = this.device.createCommandEncoder();
+        var pass = commandEncoder.beginComputePass();
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatch(numWorkGroups, 1, 1);
+        pass.endPass();
+        this.device.defaultQueue.submit([commandEncoder.finish()]);
+
+        this.device.defaultQueue.signal(fence, fenceValue);
+        await fence.onCompletion(fenceValue);
+        fenceValue += 1;
+        var end = performance.now();
+        console.log(`Decompressed ${volumeBytes} in ${end - start}ms = ${1e-3 * volumeBytes / (end - start)} MB/s`);
+    }
+
+    commandEncoder = this.device.createCommandEncoder();
     commandEncoder.copyBufferToBuffer(decompressedBuffer, 0, readbackBuffer, 0, volumeBytes);
     this.device.defaultQueue.submit([commandEncoder.finish()]);
 
