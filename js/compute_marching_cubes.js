@@ -15,37 +15,47 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
 
     // Note: bytes per row has to be multiple of 256, so smaller volumes would
     // need padding later on when using textures
-    var [volumeBuffer, mapping] = device.createBufferMapped({
-        size: volume.length * volume.BYTES_PER_ELEMENT,
-        usage: GPUBufferUsage.STORAGE,
-    });
+    if (volume instanceof GPUBuffer) {
+        console.log("Got GPU volume data");
+        this.volumeBuffer = volume;
+    } else {
+        var [volumeBuffer, mapping] = device.createBufferMapped({
+            size: volume.length * volume.BYTES_PER_ELEMENT,
+            usage: GPUBufferUsage.STORAGE,
+        });
+        if (volumeType == "uint8") {
+            new Uint8Array(mapping).set(volume);
+        } else if (volumeType == "uint16") {
+            new Uint16Array(mapping).set(volume);
+        } else if (volumeType == "uint32") {
+            new Uint32Array(mapping).set(volume);
+        } else if (volumeType == "float32") {
+            new Float32Array(mapping).set(volume);
+        }
+        volumeBuffer.unmap();
+        this.volumeBuffer = volumeBuffer;
+    }
 
     var compute_active_shader = null;
     var compute_num_verts_shader = null;
     var compute_verts_shader = null;
     if (volumeType == "uint8") {
-        new Uint8Array(mapping).set(volume);
         compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint8_comp_spv});
         compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint8_comp_spv});
         compute_verts_shader = device.createShaderModule({code: compute_vertices_uint8_comp_spv});
     } else if (volumeType == "uint16") {
-        new Uint16Array(mapping).set(volume);
         compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint16_comp_spv});
         compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint16_comp_spv});
         compute_verts_shader = device.createShaderModule({code: compute_vertices_uint16_comp_spv});
     } else if (volumeType == "uint32") {
-        new Uint32Array(mapping).set(volume);
         compute_active_shader = device.createShaderModule({code: compute_active_voxel_uint32_comp_spv});
         compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_uint32_comp_spv});
         compute_verts_shader = device.createShaderModule({code: compute_vertices_uint32_comp_spv});
     } else if (volumeType == "float32") {
-        new Float32Array(mapping).set(volume);
         compute_active_shader = device.createShaderModule({code: compute_active_voxel_float_comp_spv});
         compute_num_verts_shader = device.createShaderModule({code: compute_num_verts_float_comp_spv});
         compute_verts_shader = device.createShaderModule({code: compute_vertices_float_comp_spv});
     }
-    volumeBuffer.unmap();
-    this.volumeBuffer = volumeBuffer;
 
     var [triTableBuf, mapping] = device.createBufferMapped({
         size: triTable.byteLength,
@@ -122,7 +132,7 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
             {
                 binding: 0,
                 resource: {
-                    buffer: volumeBuffer
+                    buffer: this.volumeBuffer
                 }
             },
             {

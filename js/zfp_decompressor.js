@@ -1,7 +1,3 @@
-var alignTo = function(val, align) {
-    return Math.floor((val + align - 1) / align) * align;
-}
-
 var ZFPDecompressor = function(device) {
     this.device = device;
 
@@ -70,11 +66,6 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
     });
 
-    var readbackBuffer = this.device.createBuffer({
-        size: volumeBytes,
-        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
-    });
-
     var bindGroup = this.device.createBindGroup({
         layout: this.bindGroupLayout,
         entries: [
@@ -102,7 +93,7 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
     var fence = this.device.defaultQueue.createFence();
     var fenceValue = 1;
 
-    for (var i = 0; i < 10; ++i) {
+    //for (var i = 0; i < 10; ++i) {
         var start = performance.now();
         var commandEncoder = this.device.createCommandEncoder();
         var pass = commandEncoder.beginComputePass();
@@ -117,16 +108,8 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
         fenceValue += 1;
         var end = performance.now();
         console.log(`Decompressed ${volumeBytes} in ${end - start}ms = ${1e-3 * volumeBytes / (end - start)} MB/s`);
-    }
+    //}
 
-    commandEncoder = this.device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(decompressedBuffer, 0, readbackBuffer, 0, volumeBytes);
-    this.device.defaultQueue.submit([commandEncoder.finish()]);
-
-    var mapping = new Float32Array(await readbackBuffer.mapReadAsync());
-    var result = Float32Array.from(mapping);
-    readbackBuffer.unmap();
-    console.log(result);
-    return result;
+    return decompressedBuffer;
 }
 

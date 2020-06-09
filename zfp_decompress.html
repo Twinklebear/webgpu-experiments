@@ -17,12 +17,27 @@
                 <h4>WebGPU Experiments</h4>
                 <canvas id="webgpu-canvas" class="img-fluid" width="640" height="480"></canvas>
             </div>
-            <div class="col-12 text-center">
-                ZFP Decompression
+            <div class="col-12 col-lg-8 text-center mx-auto">
+                ZFP decompression and Marching Cubes
+                <p id="mcInfo"></p>
+                <p id="fps"></p>
+            </div>
+            <div class="col-12 col-lg-8 mx-auto">
+                <label for="isovalue">Isovalue</label>
+                <input type="range" class="form-control-range" id="isovalue" min="0.0" max="255.0" step="1">
+                <button href="javascript:void(0);" onclick="recomputeSurface();"
+                        id="recomputeSurface" type="button" class="btn btn-primary">Recompute Surface (for benchmarking)</button>
             </div>
         </div>
     </div>
     <script src="shaders/zfp_decompress_spv.js"></script>
+    <script src="shaders/embed_marching_cubes_shaders.js"></script>
+    <script src="js/gl-matrix-min.js"></script>
+    <script src="js/webgl-util.js"></script>
+    <script src="js/exclusive_scan.js"></script>
+    <script src="js/volumes.js"></script>
+    <script src="js/tri_table.js"></script>
+    <script src="js/compute_marching_cubes.js"></script>
     <script src="js/zfp_decompressor.js"></script>
     <script src="js/zfp_decompress.js"></script>
 </body>
