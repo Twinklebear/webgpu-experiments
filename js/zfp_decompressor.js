@@ -11,13 +11,13 @@ var ZFPDecompressor = function(device) {
             {
                 binding: 1,
                 visibility: GPUShaderStage.COMPUTE,
-                type: "storage-buffer"
+                type: "uniform-buffer"
             },
             {
                 binding: 2,
                 visibility: GPUShaderStage.COMPUTE,
-                type: "uniform-buffer"
-            }
+                type: "storage-buffer"
+            },
         ]
     });
 
@@ -26,7 +26,7 @@ var ZFPDecompressor = function(device) {
             bindGroupLayouts: [this.bindGroupLayout]
         }),
         computeStage: {
-            module: device.createShaderModule({code: zfp_decompress_comp_spv}),
+            module: device.createShaderModule({code: zfp_decompress_block_comp_spv}),
             entryPoint: "main"
         }
     });
@@ -41,7 +41,7 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
     console.log(`num work groups ${numWorkGroups}`);
 
     var [decodeParamsBuf, mapping] = this.device.createBufferMapped({
-        size: 16 * 4,
+        size: 9 * 4,
         usage: GPUBufferUsage.UNIFORM
     });
     {
@@ -49,7 +49,7 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
         var buf = new Uint32Array(mapping);
         buf.set(volumeDims)
         buf.set(paddedDims, 4);
-        buf.set([numWorkGroups, maxBits], 8);
+        buf.set([maxBits], 8);
     }
     decodeParamsBuf.unmap();
 
@@ -78,13 +78,13 @@ ZFPDecompressor.prototype.decompress = async function(compressedInput, compressi
             {
                 binding: 1,
                 resource: {
-                    buffer: decompressedBuffer
+                    buffer: decodeParamsBuf
                 }
             },
             {
                 binding: 2,
                 resource: {
-                    buffer: decodeParamsBuf
+                    buffer: decompressedBuffer
                 }
             }
         ]
