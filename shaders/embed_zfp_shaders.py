@@ -9,7 +9,7 @@ if len(sys.argv) < 2:
 
 glslc = sys.argv[1]
 output = "zfp_decompress_spv.js"
-shaders = ["zfp_decompress_block.comp"]
+shaders = ["zfp_decompress_block.comp", "zfp_compute_block_range.comp"]
 
 try:
     os.stat(output)

@@ -12,10 +12,12 @@
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
 
-    var compressionRate = 1;
-    var baseVolumeName = "magnetic_reconnection_512x512x512_float32.raw";
-    //var baseVolumeName = "skull_256x256x256_uint8.raw";
-    //var baseVolumeName = "fuel_64x64x64_uint8.raw";
+    //var compressionRate = 1;
+    //var baseVolumeName = "magnetic_reconnection_512x512x512_float32.raw";
+
+    var compressionRate = 2;
+    var baseVolumeName = "fuel_64x64x64_uint8.raw";
+
     var volumeDims = getVolumeDimensions(baseVolumeName);
     var zfpDataName = baseVolumeName + ".zfp";
     var compressedData = await fetch("/models/" + zfpDataName)
@@ -29,14 +31,15 @@
     }
 
     var decompressor = new ZFPDecompressor(device);
-    var decompressed = await decompressor.decompress(compressedData, compressionRate, volumeDims);
+    decompressor.prepareInput(compressedData, compressionRate, volumeDims);
+    var decompressed = await decompressor.decompress();
     compressedData = null;
 
     var mcInfo = document.getElementById("mcInfo");
 
     var isovalueSlider = document.getElementById("isovalue");
     isovalueSlider.min = 0;
-    isovalueSlider.max = 4;
+    isovalueSlider.max = 255;
     isovalueSlider.step = (isovalueSlider.max - isovalueSlider.min) / 255;
     isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
     var currentIsovalue = isovalueSlider.value;
