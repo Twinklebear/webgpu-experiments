@@ -1,4 +1,9 @@
 (async () => {
+    if (!navigator.gpu) {
+        alert("WebGPU is not supported/enabled in your browser");
+        return;
+    }
+
     var adapter = await navigator.gpu.requestAdapter();
     var device = await adapter.requestDevice();
 
