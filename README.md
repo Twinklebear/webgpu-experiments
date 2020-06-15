@@ -8,7 +8,7 @@ a version of [libLAS](https://github.com/LAStools/LAStools)
 compiled to Web Assembly, to load las and laz files directly in the browser.
 The Marching Cubes example is a data-parallel implementation of marching cubes
 written using compute shaders to leverage GPU compute for interactive isosurface
-extraction. If you have a browser with WebGPU enabled, you can try them out online!
+extraction. If you have a browser with WebGPU enabled, you can try them out:
 [glTF Viewer](https://www.willusher.io/webgpu-experiments/glb_viewer.html),
 [LiDAR Viewer](https://www.willusher.io/webgpu-experiments/lidar_viewer.html),
 [Marching Cubes](https://www.willusher.io/webgpu-experiments/marching_cubes.html).
