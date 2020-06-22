@@ -123,11 +123,20 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     // Block sum buffer
     var [blockSumBuf, mapping] = this.device.createBufferMapped({
         size: this.blockSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
     new Uint32Array(mapping).fill(0);
     blockSumBuf.unmap();
     this.blockSumBuf = blockSumBuf;
+ 
+    // Buffer to clear the block sums for each new scan
+    var [clearBlocks, mapping] = this.device.createBufferMapped({
+        size: ScanBlockSize * 4,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+    });
+    new Uint32Array(mapping).fill(0);
+    clearBlocks.unmap();
+    this.clearBlockSumBuf = clearBlocks;
 
     var [carryBuf, mapping] = this.device.createBufferMapped({
         size: 8,
@@ -216,8 +225,10 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     // over the results of the previous chunks
     var commandEncoder = this.device.createCommandEncoder();
 
-    // Clear the carry buffer and the readback sum entry if it's not scan size aligned
+    // Clear the carry buffer, block sum buffer, and the readback sum entry if it's not scan size aligned
+    commandEncoder.copyBufferToBuffer(this.clearBlockSumBuf, 0, this.blockSumBuf, 0, ScanBlockSize * 4);
     commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.carryBuf, 0, 8);
+    commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.carryIntermediateBuf, 0, 4);
     // TODO: Lingering bug on FF, seems like the buffer or scan input isn't cleared?
     if (this.dataSize < this.inputSize) {
         commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.inputBuf, this.dataSize * 4, 4);
