@@ -611,7 +611,7 @@ var uploadGLBModel = async function(buffer, device) {
             // and find if the texture which uses this image is used by a metallic/roughness param
             var gpuImg = device.createTexture({
                 size: [img.width, img.height, 1],
-                format: "rgba8unorm", // -srgb crashes
+                format: "rgba8unorm-srgb",
                 usage: GPUTextureUsage.SAMPLED | GPUTextureUsage.COPY_DST,
             });
 
