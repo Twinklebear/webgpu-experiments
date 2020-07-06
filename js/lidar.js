@@ -313,7 +313,7 @@
         var end = performance.now();
         numFrames += 1;
         totalTimeMS += end - start;
-        fpsDisplay.innerHTML = `Avg. FPS ${Math.round(1000.0 * numFrames / totalTimeMS)}`;
+        fpsDisplay.innerHTML = `Avg. FPS ${(1000.0 * numFrames / totalTimeMS).toFixed(2)}`;
     }
 })();
 
