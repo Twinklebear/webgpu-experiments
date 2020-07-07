@@ -17,7 +17,7 @@ var ZFPDecompressor = function(device) {
                 binding: 2,
                 visibility: GPUShaderStage.COMPUTE,
                 type: "storage-buffer"
-            },
+            }
         ]
     });
 
@@ -27,18 +27,6 @@ var ZFPDecompressor = function(device) {
         }),
         computeStage: {
             module: device.createShaderModule({code: zfp_decompress_block_comp_spv}),
-            entryPoint: "main"
-        }
-    });
-
-    // Note: this could be done by the server for us, but for this prototype
-    // it's a bit easier to just do it here
-    this.computeBlockRangePipeline = device.createComputePipeline({
-        layout: device.createPipelineLayout({
-            bindGroupLayouts: [this.bindGroupLayout]
-        }),
-        computeStage: {
-            module: device.createShaderModule({code: zfp_compute_block_range_comp_spv}),
             entryPoint: "main"
         }
     });
