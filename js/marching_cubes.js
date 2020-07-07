@@ -19,6 +19,7 @@
     var isovalueSlider = document.getElementById("isovalue");
     isovalueSlider.min = 0;
     isovalueSlider.max = 255;
+    isovalueSlider.step = (isovalueSlider.max - isovalueSlider.min) / 255;
     isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
     var currentIsovalue = isovalueSlider.value;
 
@@ -219,15 +220,61 @@
     var fence = device.defaultQueue.createFence();
     var fenceValue = 1;
 
+    var RandomIsovalueBenchmark = function(isovalueSlider, perfResults, range) {
+        this.iteration = 0;
+        this.isovalueSlider = isovalueSlider;
+        this.perfResults = perfResults;
+        this.range = range;
+    }
+
+    RandomIsovalueBenchmark.prototype.run = function() {
+        if (this.iteration == 100) {
+            console.log(JSON.stringify(this.perfResults));
+            for (const prop in this.perfResults) {
+                var sum = this.perfResults[prop].reduce(function(acc, x) { return acc + x; });
+                console.log(`${prop} average = ${(sum / this.perfResults[prop].length).toFixed(3)}`);
+            }
+            return false;
+        }
+        var range = this.range[1] - this.range[0];
+        this.isovalueSlider.value = Math.random() * range + this.range[0];
+        this.iteration += 1;
+        return true;
+    }
+    var currentBenchmark = null;
+    var requestBenchmark = 0;
+    var perfResults = {};
+
+    function runBenchmark() {
+        requestBenchmark = 1;
+    }
+    document.getElementById("runRandomBenchmark").onclick = runBenchmark;
+
     while (true) {
         await animationFrame();
         var start = performance.now();
+
+        if (requestBenchmark && !currentBenchmark) {
+            perfResults = {
+                time: []
+            };
+            currentBenchmark = new RandomIsovalueBenchmark(isovalueSlider, perfResults, [10, 255]);
+            requestBenchmark = 0;
+        }
+        if (currentBenchmark) {
+            if (!currentBenchmark.run()) {
+                currentBenchmark = null;
+            }
+        }
 
         if (isovalueSlider.value != currentIsovalue || requestRecompute) {
             currentIsovalue = isovalueSlider.value;
             var start = performance.now();
             totalVerts = await marchingCubes.computeSurface(currentIsovalue);
             var end = performance.now();
+            if (perfResults.time !== undefined) {
+                perfResults.time.push(end - start);
+            }
             console.log(`Computation took ${end - start}ms`);
             mcInfo.innerHTML = `Extracted surface with ${totalVerts / 3} triangles in ${end - start}ms. Isovalue = ${currentIsovalue}`;
             requestRecompute = false;

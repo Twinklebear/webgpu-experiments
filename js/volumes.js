@@ -10,6 +10,7 @@ var volumes = {
     "Foot": "ic0mik3qv4vqacm/foot_256x256x256_uint8.raw",
     "Skull": "5rfjobn0lvb7tmo/skull_256x256x256_uint8.raw",
     "Aneurysm": "3ykigaiym8uiwbp/aneurism_256x256x256_uint8.raw",
+    "local": "/models/magnetic_reconnection_512x512x512_float32.raw"
 };
 
 var fileRegex = /.*\/(\w+)_(\d+)x(\d+)x(\d+)_(\w+)\.*/;
