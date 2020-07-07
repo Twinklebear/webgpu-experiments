@@ -12,14 +12,33 @@
     var canvas = document.getElementById("webgpu-canvas");
     var context = canvas.getContext("gpupresent");
 
-    //var compressionRate = 1;
-    //var baseVolumeName = "magnetic_reconnection_512x512x512_float32.raw";
+    var datasets = {
+        // For benchmarks:
+        skull: {
+            compressionRate: 2,
+            name: "skullcrate2_256x256x256_uint8.raw",
+            range: [10, 255],
+            scale: [1, 1, 1]
+        },
+        magnetic: {
+            compressionRate: 2,
+            name: "magnetic_reconnection_crate2_512x512x512_float32.raw",
+            range: [0.1, 3.5],
+            scale: [1, 1, 1]
+        },
+        miranda: {
+            compressionRate: 2,
+            name: "miranda_crate2_1024x1024x1024_float32.raw",
+            range: [1.05, 2.9],
+            scale: [1, 1, 1]
+        }
+    }
 
-    var compressionRate = 2;
-    var baseVolumeName = "fuel_64x64x64_uint8.raw";
+    var dataset = datasets.skull;
+    console.log(dataset);
 
-    var volumeDims = getVolumeDimensions(baseVolumeName);
-    var zfpDataName = baseVolumeName + ".zfp";
+    var volumeDims = getVolumeDimensions(dataset.name);
+    var zfpDataName = dataset.name + ".zfp";
     var compressedData = await fetch("/models/" + zfpDataName)
         .then(res => res.arrayBuffer().then(function (arr) { 
             return new Uint8Array(arr);
@@ -31,17 +50,18 @@
     }
 
     var decompressor = new ZFPDecompressor(device);
-    decompressor.prepareInput(compressedData, compressionRate, volumeDims);
+    decompressor.prepareInput(compressedData, dataset.compressionRate, volumeDims);
     var decompressed = await decompressor.decompress();
     compressedData = null;
+    return;
 
     var mcInfo = document.getElementById("mcInfo");
 
     var isovalueSlider = document.getElementById("isovalue");
-    isovalueSlider.min = 0;
-    isovalueSlider.max = 255;
-    isovalueSlider.step = (isovalueSlider.max - isovalueSlider.min) / 255;
-    isovalueSlider.value = (isovalueSlider.max - isovalueSlider.min) / 2;
+    isovalueSlider.min = dataset.range[0];
+    isovalueSlider.max = dataset.range[1];
+    isovalueSlider.step = (dataset.range[1] - dataset.range[0]) / 255;
+    isovalueSlider.value = (dataset.range[1] - dataset.range[0]) / 2;
     var currentIsovalue = isovalueSlider.value;
 
     var volumeType = "float32";

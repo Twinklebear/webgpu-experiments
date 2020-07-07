@@ -75,59 +75,6 @@ ZFPDecompressor.prototype.prepareInput = async function(compressedInput, compres
     new Uint8Array(mapping).set(compressedInput);
     compressedBuffer.unmap();
     this.compressedBuffer = compressedBuffer;
-
-    // Compute the block ranges
-    this.blockRangesBuffer = this.device.createBuffer({
-        size: this.totalBlocks * 2 * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-
-    // TODO next: union each block's range with its neighbors so we can see
-    // the full range of values which may be contained in its dual
-    var bindGroup = this.device.createBindGroup({
-        layout: this.bindGroupLayout,
-        entries: [
-            {
-                binding: 0,
-                resource: {
-                    buffer: this.compressedBuffer
-                }
-            },
-            {
-                binding: 1,
-                resource: {
-                    buffer: this.decodeParamsBuf
-                }
-            },
-            {
-                binding: 2,
-                resource: {
-                    buffer: this.blockRangesBuffer
-                }
-            }
-        ]
-    });
-
-    var commandEncoder = this.device.createCommandEncoder();
-    var pass = commandEncoder.beginComputePass();
-    pass.setPipeline(this.computeBlockRangePipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.dispatch(this.numWorkGroups, 1, 1);
-    pass.endPass();
-    this.device.defaultQueue.submit([commandEncoder.finish()]);
-
-    // For testing: readback the block range buffer
-    var readback = this.device.createBuffer({
-        size: this.totalBlocks * 2 * 4,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-    });
-    commandEncoder = this.device.createCommandEncoder();
-    commandEncoder.copyBufferToBuffer(this.blockRangesBuffer, 0, readback, 0, this.totalBlocks * 2 * 4);
-    this.device.defaultQueue.submit([commandEncoder.finish()]);
-
-    var mapping = new Float32Array(await readback.mapReadAsync());
-    console.log(mapping);
-    readback.unmap();
 }
 
 ZFPDecompressor.prototype.decompress = async function() {
@@ -164,7 +111,8 @@ ZFPDecompressor.prototype.decompress = async function() {
     var fence = this.device.defaultQueue.createFence();
     var fenceValue = 1;
 
-    //for (var i = 0; i < 10; ++i) {
+    var totalTime = 0;
+    for (var i = 0; i < 11; ++i) {
         var start = performance.now();
         var commandEncoder = this.device.createCommandEncoder();
         var pass = commandEncoder.beginComputePass();
@@ -179,7 +127,12 @@ ZFPDecompressor.prototype.decompress = async function() {
         fenceValue += 1;
         var end = performance.now();
         console.log(`Decompressed ${volumeBytes} in ${end - start}ms = ${1e-3 * volumeBytes / (end - start)} MB/s`);
-    //}
+        if (i > 0) {
+            totalTime += end - start;
+        }
+    }
+    var avgTime = totalTime / 10.0;
+    console.log(`Avg. time ${avgTime}ms = ${1e-3 * volumeBytes / avgTime} MB/s`);
 
     return decompressedBuffer;
 }
