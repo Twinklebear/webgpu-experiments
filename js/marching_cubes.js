@@ -91,7 +91,7 @@
 		}
 	};
 	controller.wheel = function(amt) {
-        camera.zoom(amt * 0.5);
+        camera.zoom(amt * 0.1);
         numFrames = 0;
         totalTimeMS = 0;
     };
