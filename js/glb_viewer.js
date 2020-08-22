@@ -175,11 +175,12 @@
         var commandEncoder = device.createCommandEncoder();
         
         projView = mat4.mul(projView, proj, camera.camera);
-        var [upload, uploadMap] = device.createBufferMapped({
+        var upload = device.createBuffer({
             size: 4 * 4 * 4,
-            usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC
+            usage: GPUBufferUsage.MAP_WRITE | GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true
         });
-        new Float32Array(uploadMap).set(projView);
+        new Float32Array(upload.getMappedRange()).set(projView);
         upload.unmap();
 
         commandEncoder.copyBufferToBuffer(upload, 0, viewParamBuf, 0, 4 * 4 * 4);

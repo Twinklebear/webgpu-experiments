@@ -154,11 +154,12 @@ GLTFBufferView.prototype.addUsage = function(usage) {
 }
 
 GLTFBufferView.prototype.upload = function(device) {
-    var [buf, mapping] = device.createBufferMapped({
+    var buf = device.createBuffer({
         size: this.buffer.byteLength,
         usage: this.usage,
+        mappedAtCreation: true
     });
-    new (this.buffer.constructor)(mapping).set(this.buffer);
+    new (this.buffer.constructor)(buf.getMappedRange()).set(this.buffer);
     buf.unmap();
     this.gpuBuffer = buf;
 }
@@ -308,11 +309,12 @@ var GLTFNode = function(name, mesh, transform) {
 }
 
 GLTFNode.prototype.upload = function(device) {
-    var [buf, mapping] = device.createBufferMapped({
+    var buf = device.createBuffer({
         size: 4 * 4 * 4,
-        usage: GPUBufferUsage.UNIFORM
+        usage: GPUBufferUsage.UNIFORM,
+        mappedAtCreation: true
     });
-    new Float32Array(mapping).set(this.transform);
+    new Float32Array(buf.getMappedRange()).set(this.transform);
     buf.unmap();
     this.gpuUniforms = buf;
 }
@@ -448,11 +450,12 @@ var GLTFMaterial = function(material, textures) {
 }
 
 GLTFMaterial.prototype.upload = function(device) {
-    var [buf, mapping] = device.createBufferMapped({
+    var buf = device.createBuffer({
         size: (2 * 4 + 2) * 4,
         usage: GPUBufferUsage.UNIFORM,
+        mappedAtCreation: true
     });
-    var mappingView = new Float32Array(mapping);
+    var mappingView = new Float32Array(buf.getMappedRange());
     mappingView.set(this.baseColorFactor);
     mappingView.set(this.emissiveFactor, 4);
     mappingView.set([this.metallicFactor, this.roughnessFactor], 8);

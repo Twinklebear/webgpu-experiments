@@ -150,12 +150,13 @@
         var commandEncoder = device.createCommandEncoder();
 
         projView = mat4.mul(projView, proj, camera.camera);
-        var [upload, uploadMap] = device.createBufferMapped({
+        var upload = device.createBuffer({
             size: 20 * 4,
-            usage: GPUBufferUsage.COPY_SRC
+            usage: GPUBufferUsage.COPY_SRC,
+            mappedAtCreation: true,
         });
         {
-            var viewmap = new Float32Array(uploadMap);
+            var viewmap = new Float32Array(upload.getMappedRange());
             viewmap.set(projView);
             viewmap.set(camera.eyePos(), 16);
         }
@@ -176,11 +177,12 @@
             lasColorBuffer = null;
             lasInfo.innerHTML = `LAS File with ${lasFile.numLoadedPoints} loaded points (noise classified points are discarded)`;
 
-            var [buffer, mapping] = device.createBufferMapped({
+            var buffer = device.createBuffer({
                 size: lasFile.numLoadedPoints * 3 * 4,
-                usage: GPUBufferUsage.VERTEX
+                usage: GPUBufferUsage.VERTEX,
+                mappedAtCreation: true,
             });
-            new Float32Array(mapping).set(lasFile.positions);
+            new Float32Array(buffer.getMappedRange()).set(lasFile.positions);
             buffer.unmap();
             lasVertexBuffer = buffer;
 
@@ -213,11 +215,12 @@
                     ]
                 });
 
-                var [buffer, mapping] = device.createBufferMapped({
+                var buffer = device.createBuffer({
                     size: lasFile.numLoadedPoints * 4,
-                    usage: GPUBufferUsage.VERTEX
+                    usage: GPUBufferUsage.VERTEX,
+                    mappedAtCreation: true
                 });
-                new Uint8Array(mapping).set(lasFile.colors);
+                new Uint8Array(buffer.getMappedRange()).set(lasFile.colors);
                 buffer.unmap();
                 lasColorBuffer = buffer;
 
@@ -241,11 +244,13 @@
             }
 
             // Update the dataset info
-            var [buffer, mapping] = device.createBufferMapped({
+            var buffer = device.createBuffer({
                 size: 10 * 4,
-                usage: GPUBufferUsage.COPY_SRC
+                usage: GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
             });
             {
+                var mapping = buffer.getMappedRange();
                 var arr = new Float32Array(mapping);
                 arr.set([lasFile.bounds[0], lasFile.bounds[1], lasFile.bounds[2]]);
                 arr.set([lasFile.bounds[3], lasFile.bounds[4], lasFile.bounds[5]], 4);
@@ -281,10 +286,12 @@
             pointRadius = pointRadiusSlider.value;
             useRoundPoints = roundPoints.checked;
 
-            var [buffer, mapping] = device.createBufferMapped({
+            var buffer = device.createBuffer({
                 size: 8,
-                usage: GPUBufferUsage.COPY_SRC
+                usage: GPUBufferUsage.COPY_SRC,
+                mappedAtCreation: true
             });
+            var mapping = buffer.getMappedRange();
             new Float32Array(mapping).set([pointRadius], 0);
             new Uint32Array(mapping).set([useRoundPoints ? 1 : 0], 1);
             buffer.unmap();

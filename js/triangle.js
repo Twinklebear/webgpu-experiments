@@ -40,12 +40,13 @@
         }
     };
 
-    var [dataBuf, dataBufMapping] = device.createBufferMapped({
+    var dataBuf = device.createBuffer({
         size: 3 * 2 * 4 * 4,
-        usage: GPUBufferUsage.VERTEX
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true
     });
     // Interleaved positions and colors
-    new Float32Array(dataBufMapping).set([
+    new Float32Array(dataBuf.getMappedRange()).set([
         1, -1, 0, 1,
         1, 0, 0, 1,
         -1, -1, 0, 1,
