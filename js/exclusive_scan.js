@@ -85,11 +85,12 @@ var ExclusiveScanner = function(device) {
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
     });
 
-    var [clearCarryBuf, mapping] = this.device.createBufferMapped({
+    var clearCarryBuf = this.device.createBuffer({
         size: 8,
         usage: GPUBufferUsage.COPY_SRC,
+        mappedAtCreation: true
     });
-    new Uint32Array(mapping).set([0, 0]);
+    new Uint32Array(clearCarryBuf.getMappedRange()).set([0, 0]);
     clearCarryBuf.unmap();
     this.clearCarryBuf = clearCarryBuf;
 }
@@ -102,11 +103,12 @@ ExclusiveScanner.prototype.prepareInput = function(cpuArray) {
     var alignedSize = alignTo(cpuArray.length, this.blockSize)
 
     // Upload input and pad to block size elements
-    var [inputBuf, mapping] = this.device.createBufferMapped({
+    var inputBuf = this.device.createBuffer({
         size: alignedSize * 4,
         usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
     });
-    new Uint32Array(mapping).set(cpuArray);
+    new Uint32Array(inputBuf.getMappedRange()).set(cpuArray);
     inputBuf.unmap();
 
     this.prepareGPUInput(inputBuf, alignedSize, cpuArray.length);
@@ -121,28 +123,31 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     this.inputBuf = gpuBuffer
 
     // Block sum buffer
-    var [blockSumBuf, mapping] = this.device.createBufferMapped({
+    var blockSumBuf = this.device.createBuffer({
         size: this.blockSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
     });
-    new Uint32Array(mapping).fill(0);
+    new Uint32Array(blockSumBuf.getMappedRange()).fill(0);
     blockSumBuf.unmap();
     this.blockSumBuf = blockSumBuf;
  
     // Buffer to clear the block sums for each new scan
-    var [clearBlocks, mapping] = this.device.createBufferMapped({
+    var clearBlocks = this.device.createBuffer({
         size: ScanBlockSize * 4,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+        mappedAtCreation: true
     });
-    new Uint32Array(mapping).fill(0);
+    new Uint32Array(clearBlocks.getMappedRange()).fill(0);
     clearBlocks.unmap();
     this.clearBlockSumBuf = clearBlocks;
 
-    var [carryBuf, mapping] = this.device.createBufferMapped({
+    var carryBuf = this.device.createBuffer({
         size: 8,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
     });
-    new Uint32Array(mapping).fill(0);
+    new Uint32Array(carryBuf.getMappedRange()).fill(0);
     carryBuf.unmap();
     this.carryBuf = carryBuf;
 
@@ -281,7 +286,8 @@ ExclusiveScanner.prototype.scan = async function() {
     */
 
     // Readback the final carry out, which is the sum
-    var mapping = new Uint32Array(await this.readbackBuf.mapReadAsync());
+    await this.readbackBuf.mapAsync(GPUMapMode.READ);
+    var mapping = new Uint32Array(this.readbackBuf.getMappedRange());
     var sum = mapping[0];
     this.readbackBuf.unmap();
 

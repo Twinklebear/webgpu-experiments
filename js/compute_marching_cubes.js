@@ -3,10 +3,12 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
     this.device = device;
 
     // Info buffer contains the volume dims and the isovalue
-    var [volumeInfoBuffer, mapping] = device.createBufferMapped({
+    var volumeInfoBuffer = device.createBuffer({
         size: 4 * 4 + 4,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
     });
+    var mapping = volumeInfoBuffer.getMappedRange();
     new Uint32Array(mapping).set(volumeDims);
     new Float32Array(mapping).set([128], 4);
     volumeInfoBuffer.unmap();
@@ -19,10 +21,12 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
         console.log("Got GPU volume data");
         this.volumeBuffer = volume;
     } else {
-        var [volumeBuffer, mapping] = device.createBufferMapped({
+        var volumeBuffer = device.createBuffer({
             size: volume.length * volume.BYTES_PER_ELEMENT,
             usage: GPUBufferUsage.STORAGE,
+            mappedAtCreation: true
         });
+        var mapping = volumeBuffer.getMappedRange();
         if (volumeType == "uint8") {
             new Uint8Array(mapping).set(volume);
         } else if (volumeType == "uint16") {
@@ -57,11 +61,12 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
         compute_verts_shader = device.createShaderModule({code: compute_vertices_float_comp_spv});
     }
 
-    var [triTableBuf, mapping] = device.createBufferMapped({
+    var triTableBuf = device.createBuffer({
         size: triTable.byteLength,
-        usage: GPUBufferUsage.UNIFORM
+        usage: GPUBufferUsage.UNIFORM,
+        mappedAtCreation: true,
     });
-    new Int32Array(mapping).set(triTable);
+    new Int32Array(triTableBuf.getMappedRange()).set(triTable);
     triTableBuf.unmap();
     this.triTable = triTableBuf;
 
@@ -302,11 +307,12 @@ var MarchingCubes = function(device, volume, volumeDims, volumeType) {
 
 MarchingCubes.prototype.computeSurface = async function(isovalue) {
     // Upload the isovalue
-    var [upload, mapping] = this.device.createBufferMapped({
+    var upload = this.device.createBuffer({
         size: 4,
         usage: GPUBufferUsage.COPY_SRC,
+        mappedAtCreation: true
     });
-    new Float32Array(mapping).set([isovalue]);
+    new Float32Array(upload.getMappedRange()).set([isovalue]);
     upload.unmap();
 
     var commandEncoder = this.device.createCommandEncoder();
@@ -377,12 +383,13 @@ MarchingCubes.prototype.compactActiveVoxels = function(totalActive) {
     // that the dynamic offsets be 256b aligned
     // Please add push constants!
     var numChunks = Math.ceil(voxelsToProcess / this.maxDispatchSize);
-    var [compactPassOffset, mapping] = this.device.createBufferMapped({
+    var compactPassOffset = this.device.createBuffer({
         size: numChunks * 256,
-        usage: GPUBufferUsage.UNIFORM
+        usage: GPUBufferUsage.UNIFORM,
+        mappedAtCreation: true
     });
     {
-        var map = new Uint32Array(mapping);
+        var map = new Uint32Array(compactPassOffset.getMappedRange());
         for (var i = 0; i < numChunks; ++i) {
             map[i * 64] = i * this.maxDispatchSize;
         }
