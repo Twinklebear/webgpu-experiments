@@ -220,12 +220,14 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
         });
     }
 
-    var numChunks = Math.ceil(this.inputSize / this.maxScanSize);
-    this.offsets = new Uint32Array(numChunks);
-    for (var i = 0; i < numChunks; ++i) {
+    this.numChunks = Math.ceil(this.inputSize / this.maxScanSize);
+    this.offsets = new Uint32Array(this.numChunks);
+    for (var i = 0; i < this.numChunks; ++i) {
         this.offsets.set([i * this.maxScanSize * 4], i);
     }
+}
 
+ExclusiveScanner.prototype.scan = async function() {
     // Scan through the data in chunks, updating carry in/out at the end to carry
     // over the results of the previous chunks
     var commandEncoder = this.device.createCommandEncoder();
@@ -237,7 +239,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     if (this.dataSize < this.inputSize) {
         commandEncoder.copyBufferToBuffer(this.clearCarryBuf, 0, this.inputBuf, this.dataSize * 4, 4);
     }
-    for (var i = 0; i < numChunks; ++i) {
+    for (var i = 0; i < this.numChunks; ++i) {
         var nWorkGroups = Math.min((this.inputSize - i * this.maxScanSize) / this.blockSize, this.blockSize);
 
         var scanBlockBG = this.scanBlocksBindGroup;
@@ -273,11 +275,7 @@ ExclusiveScanner.prototype.prepareGPUInput = function(gpuBuffer, alignedSize, da
     } else {
         commandEncoder.copyBufferToBuffer(this.carryBuf, 4, this.readbackBuf, 0, 4);
     }
-    this.commandBuffer = commandEncoder.finish();
-}
-
-ExclusiveScanner.prototype.scan = async function() {
-    this.device.defaultQueue.submit([this.commandBuffer]);
+    this.device.defaultQueue.submit([commandEncoder.finish()]);
     /*
     this.device.defaultQueue.signal(this.fence, scanner.fenceValue);
 
