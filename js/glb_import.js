@@ -287,7 +287,8 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, bindGroupLayouts, b
         bundleEncoder.setVertexBuffer(2, this.texcoords[0].view.gpuBuffer, this.texcoords[0].byteOffset, 0);
     }
     if (this.indices) {
-        bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, this.indices.byteOffset, 0);
+        bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, pipelineDescriptor.vertexState.indexFormat,
+            this.indices.byteOffset, 0);
         bundleEncoder.drawIndexed(this.indices.count, 1, 0, 0, 0);
     } else {
         bundleEncoder.draw(this.positions.count, 1, 0, 0);
