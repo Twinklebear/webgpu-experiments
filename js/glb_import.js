@@ -272,10 +272,15 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, bindGroupLayouts, b
             depthCompare: "less"
         }
     };
+    /*
+    // TODO: This is an error to set on triangle-lists now? But I can still drawIndexed?
+    // Seems like some ongoing API tweaking
     if (this.indices) {
+        pipelineDescriptor.primitiveTopology = "triangle-strip";
         pipelineDescriptor.vertexState.indexFormat =
             this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
     }
+    */
 
     var renderPipeline = device.createRenderPipeline(pipelineDescriptor);
 
@@ -287,8 +292,8 @@ GLTFPrimitive.prototype.buildRenderBundle = function(device, bindGroupLayouts, b
         bundleEncoder.setVertexBuffer(2, this.texcoords[0].view.gpuBuffer, this.texcoords[0].byteOffset, 0);
     }
     if (this.indices) {
-        bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, pipelineDescriptor.vertexState.indexFormat,
-            this.indices.byteOffset, 0);
+        var indexFormat = this.indices.componentType == GLTFComponentType.UNSIGNED_SHORT ? "uint16" : "uint32";
+        bundleEncoder.setIndexBuffer(this.indices.view.gpuBuffer, indexFormat, this.indices.byteOffset, 0);
         bundleEncoder.drawIndexed(this.indices.count, 1, 0, 0, 0);
     } else {
         bundleEncoder.draw(this.positions.count, 1, 0, 0);
