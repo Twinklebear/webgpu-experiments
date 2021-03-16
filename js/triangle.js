@@ -13,7 +13,7 @@
     var swapChain = context.configureSwapChain({
         device: device,
         format: swapChainFormat,
-        usage: GPUTextureUsage.OUTPUT_ATTACHMENT
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
 
     var depthTexture = device.createTexture({
@@ -23,7 +23,7 @@
             depth: 1
         },
         format: "depth24plus-stencil8",
-        usage: GPUTextureUsage.OUTPUT_ATTACHMENT
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
 
     var renderPassDesc = {
@@ -39,6 +39,20 @@
             stencilStoreOp: "store"
         }
     };
+
+    // Testing some dynamic color offsets
+    var testDynamicBuf = device.createBuffer({
+        size: 3 * 4 * 4,
+        usage: GPUBufferUsage.STORAGE,
+        mappedAtCreation: true
+    });
+    // Interleaved positions and colors
+    new Float32Array(testDynamicBuf.getMappedRange()).set([
+        1, 0, 0, 1,
+        0, 1, 0, 1,
+        0, 0, 1, 1
+    ]);
+    testDynamicBuf.unmap();
 
     var dataBuf = device.createBuffer({
         size: 3 * 2 * 4 * 4,
@@ -59,7 +73,32 @@
     var vertModule = device.createShaderModule({code: simple_vert_spv});
     var fragModule = device.createShaderModule({code: simple_frag_spv});
 
-    var layout = device.createPipelineLayout({bindGroupLayouts: []});
+    var bgLayout = device.createBindGroupLayout({
+        entries: [
+            {
+                binding: 0,
+                visibility: GPUShaderStage.FRAGMENT,
+                type: "storage-buffer",
+                hasDynamicOffset: true
+            }
+        ]
+    });
+
+    var testBg = device.createBindGroup({
+        layout: bgLayout,
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: testDynamicBuf,
+                    size: 4 * 4,
+                    offset: 0
+                }
+            }
+        ]
+    });
+
+    var layout = device.createPipelineLayout({bindGroupLayouts: [bgLayout]});
 
     var renderPipeline = device.createRenderPipeline({
         layout: layout,
@@ -78,12 +117,12 @@
                     arrayStride: 2 * 4 * 4,
                     attributes: [
                         {
-                            format: "float4",
+                            format: "float32x4",
                             offset: 0,
                             shaderLocation: 0
                         },
                         {
-                            format: "float4",
+                            format: "float32x4",
                             offset: 4 * 4,
                             shaderLocation: 1
                         }
@@ -109,6 +148,7 @@
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
         renderPass.setPipeline(renderPipeline);
+        renderPass.setBindGroup(0, testBg, [0]);
         renderPass.setVertexBuffer(0, dataBuf);
         renderPass.draw(3, 1, 0, 0);
 
