@@ -1,0 +1,31 @@
+#version 450 core
+
+uniform layout(binding = 0, rgba8) writeonly image2D output_texture;
+
+int mandel(float c_real, float c_imag, int max_iters) {
+    int i = 0;
+    float real = c_real;
+    float imag = c_imag;
+    for (; i < max_iters; ++i){
+        if (real * real + imag * imag > 4.f){
+            return i;
+        }
+        float next_r = real * real - imag * imag + c_real;
+        float next_i = 2.f * real * imag + c_imag;
+        real = next_r;
+        imag = next_i;
+    }
+    return i;
+}
+
+void main(void) {
+    vec2 xrange = vec2(-2.f, 1.f); 
+    vec2 yrange = vec2(-1.f, 1.f); 
+    // Note: screen size is hardcoded here as 640x480
+    vec2 delta = vec2((xrange.y - xrange.x) / 640.f, (yrange.y - yrange.x) / 480.f);
+    vec2 pos = vec2(xrange.x + gl_GlobalInvocationID.x * delta.x,
+            yrange.x + gl_GlobalInvocationID.y * delta.y);
+    int count = 255 - mandel(pos.x, pos.y, 255);
+    imageStore(output_texture, ivec2(gl_GlobalInvocationID.xy), vec4(count / 255.f));
+}
+
