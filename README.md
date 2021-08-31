@@ -1,5 +1,9 @@
 # WebGPU Experiments
 
+Note (8/31/2021): these have fallen a bit out of date with WebGPU API changes coming up to
+the final release. I haven't had time to update them yet, but will update this repo when
+I've done so.
+
 A series of examples written while learning about [WebGPU](https://gpuweb.github.io/gpuweb/):
 a glTF viewer, a web-based LiDAR viewer, and a data-parallel Marching Cubes implementation using compute shaders.
 The glTF viewer uses a custom glb importer to load data efficiently into WebGPU and supports
