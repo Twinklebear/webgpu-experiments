@@ -23,7 +23,9 @@ Basic demos of rendering a triangle, or generating one and the draw calls in a c
 
 ![triangle image](https://i.imgur.com/qmiPZx8.png)
 
-## GLB Viewer [Try it out!](https://www.willusher.io/webgpu-experiments/glb_viewer.html)
+## GLB Viewer
+
+This project has been updated and split out into its own repo: https://github.com/Twinklebear/webgpu-gltf
 
 A binary glTF viewer supporting static scenes with multi-level instancing, different materials, and textures.
 
