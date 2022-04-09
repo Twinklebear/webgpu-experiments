@@ -4,10 +4,11 @@ import sys
 import os
 import subprocess
 
-if len(sys.argv) < 2:
-    print("Usage <glslc>")
+if len(sys.argv) < 3:
+    print("Usage <glslc> <tint>")
 
 glslc = sys.argv[1]
+tint = sys.argv[2]
 shaders = ["mandelbrot.comp", "mandelbrot.frag", "mandelbrot.vert"]
 output = "embedded_mandelbrot_shaders.js"
 
@@ -20,9 +21,9 @@ except:
 compiled_shaders = ""
 for shader in shaders:
     fname, ext = os.path.splitext(os.path.basename(shader))
-    var_name ="{}_{}_spv".format(fname, ext[1:])
+    var_name ="{}_{}_wgsl".format(fname, ext[1:])
     print("Embedding {} as {}".format(shader, var_name))
-    args = ["python", "compile_shader.py", glslc, shader, var_name, "-O"]
+    args = ["python3", "compile_shader.py", glslc, tint, shader, var_name, "-O"]
     compiled_shaders += subprocess.check_output(args).decode("utf-8")
 
 with open(output, "w") as f:

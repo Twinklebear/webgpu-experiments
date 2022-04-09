@@ -8,10 +8,10 @@
     var device = await adapter.requestDevice();
 
     var canvas = document.getElementById("webgpu-canvas");
-    var context = canvas.getContext("gpupresent");
+    var context = canvas.getContext("webgpu");
     var swapChainFormat = "bgra8unorm";
-    var swapChain = context.configureSwapChain(
-        {device, format: swapChainFormat, usage: GPUTextureUsage.OUTPUT_ATTACHMENT});
+    context.configure(
+        {device: device, format: swapChainFormat, usage: GPUTextureUsage.OUTPUT_ATTACHMENT});
 
     var depthTexture = device.createTexture({
         size: {width: canvas.width, height: canvas.height, depth: 1},
@@ -22,16 +22,19 @@
     var storageTexture = device.createTexture({
         size: {width: canvas.width, height: canvas.height, depth: 1},
         format: "rgba8unorm",
-        usage: GPUTextureUsage.STORAGE
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING
     });
 
     var renderPassDesc = {
-        colorAttachments: [{attachment: undefined, loadValue: [0.3, 0.3, 0.3, 1]}],
+        colorAttachments:
+            [{attachment: undefined, loadOp: "clear", clearValue: [0.3, 0.3, 0.3, 1]}],
         depthStencilAttachment: {
             view: depthTexture.createView(),
-            depthLoadValue: 1.0,
+            depthLoadOp: "clear",
+            depthClearValue: 1.0,
             depthStoreOp: "store",
-            stencilLoadValue: 0,
+            stencilLoadOp: "clear",
+            stencilClearValue: 0,
             stencilStoreOp: "store"
         }
     };
@@ -47,7 +50,7 @@
     var computeLayout =
         device.createPipelineLayout({bindGroupLayouts: [computeBindGroupLayout]});
 
-    var computeModule = device.createShaderModule({code: mandelbrot_comp_spv});
+    var computeModule = device.createShaderModule({code: mandelbrot_comp_wgsl});
 
     var computePipeline = device.createComputePipeline(
         {layout: computeLayout, compute: {module: computeModule, entryPoint: "main"}});
@@ -57,14 +60,15 @@
         entries: [{binding: 0, resource: storageTexture.createView()}]
     });
 
-    var vertModule = device.createShaderModule({code: mandelbrot_vert_spv});
-    var fragModule = device.createShaderModule({code: mandelbrot_frag_spv});
+    var vertModule = device.createShaderModule({code: mandelbrot_vert_wgsl});
+    var fragModule = device.createShaderModule({code: mandelbrot_frag_wgsl});
 
     var renderBGLayout = device.createBindGroupLayout({
         entries: [{
             binding: 0,
             visibility: GPUShaderStage.FRAGMENT,
-            storageTexture: {access: "read-only", format: "rgba8unorm"}
+            // All default is fine
+            texture: {}
         }]
     });
 
@@ -86,7 +90,7 @@
     });
 
     var frame = function() {
-        renderPassDesc.colorAttachments[0].view = swapChain.getCurrentTexture().createView();
+        renderPassDesc.colorAttachments[0].view = context.getCurrentTexture().createView();
 
         var commandEncoder = device.createCommandEncoder();
 
@@ -95,7 +99,7 @@
         computePass.setPipeline(computePipeline);
         // Fill the texture
         computePass.dispatch(640, 480, 1);
-        computePass.endPass();
+        computePass.end();
 
         var renderPass = commandEncoder.beginRenderPass(renderPassDesc);
 
@@ -103,7 +107,7 @@
         renderPass.setBindGroup(0, renderPipelineBG);
         // Draw a full screen quad
         renderPass.draw(6, 1, 0, 0);
-        renderPass.endPass();
+        renderPass.end();
 
         device.queue.submit([commandEncoder.finish()]);
 
